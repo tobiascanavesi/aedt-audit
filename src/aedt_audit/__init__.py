@@ -15,7 +15,7 @@ from .report import AuditMetadata, LL144Summary, ll144_summary
 from .synth import synthetic_applicants
 from .traceability import example_record, load_schema, validate_record
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "DEFAULT_MIN_CATEGORY_SHARE",

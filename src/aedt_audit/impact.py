@@ -17,21 +17,34 @@ from __future__ import annotations
 
 import pandas as pd
 
+from .rates import UNKNOWN
+
 #: The EEOC four-fifths threshold, 29 CFR § 1607.4(D).
 FOUR_FIFTHS = 0.8
+
+_METRIC_COLUMNS = frozenset(
+    {"n", "selected", "above_median", "rate", "share", "excluded", "impact_ratio",
+     "adverse_impact_eeoc"}
+)
 
 
 def impact_ratios(rates: pd.DataFrame, *, rate_col: str = "rate") -> pd.DataFrame:
     """Add an ``impact_ratio`` column to a rates table.
 
-    The benchmark (denominator) is the highest rate among categories **not**
-    flagged ``excluded``, so a tiny category cannot set the bar; excluded
-    categories still receive a ratio for transparency.
+    The benchmark (denominator) is the highest rate among categories that are
+    neither flagged ``excluded`` (the <2% small-category allowance) nor
+    ``"unknown"`` in any demographic column — a tiny category cannot set the
+    bar, and individuals whose demographics were not reported are disclosed
+    but do not serve as a comparison group, mirroring DCWP audit practice.
+    Both kinds of rows still receive a ratio, for transparency.
     """
     if rate_col not in rates.columns:
         raise KeyError(f"rate column {rate_col!r} not in rates table")
     out = rates.copy()
     included = ~out["excluded"] if "excluded" in out else out[rate_col].notna()
+    category_cols = [c for c in out.columns if c not in _METRIC_COLUMNS]
+    if category_cols:
+        included &= ~out[category_cols].eq(UNKNOWN).any(axis=1)
     eligible = out.loc[included, rate_col]
     benchmark = float(eligible.max()) if len(eligible) else float("nan")
     out["impact_ratio"] = out[rate_col] / benchmark if benchmark and benchmark > 0 else float("nan")

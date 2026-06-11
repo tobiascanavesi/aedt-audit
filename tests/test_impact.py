@@ -52,6 +52,35 @@ def test_excluded_category_cannot_set_benchmark():
     assert out.loc["tiny", "impact_ratio"] == pytest.approx(2.0)
 
 
+def test_unknown_category_cannot_set_benchmark():
+    # "unknown" demographics are disclosed but are not a comparison group
+    # (DCWP audit practice) — even when they have the highest rate.
+    df = pd.DataFrame(
+        {
+            "sex": ["male"] * 10 + ["female"] * 10 + [None] * 4,
+            "selected": [True] * 5 + [False] * 5 + [True] * 4 + [False] * 6 + [True] * 4,
+        }
+    )
+    out = impact_ratios(selection_rates(df, by=["sex"], outcome="selected")).set_index("sex")
+    # unknown rate is 1.0, but the benchmark must be male's 0.50
+    assert out.attrs["benchmark_rate"] == pytest.approx(0.50)
+    assert out.loc["female", "impact_ratio"] == pytest.approx(0.8)
+    # the unknown row still gets a ratio, for transparency
+    assert out.loc["unknown", "impact_ratio"] == pytest.approx(2.0)
+
+
+def test_unknown_in_any_intersectional_column_excluded_from_benchmark():
+    df = pd.DataFrame(
+        {
+            "sex": ["m", "m", None, None],
+            "race": ["x", "x", "x", "x"],
+            "selected": [True, False, True, True],
+        }
+    )
+    out = impact_ratios(selection_rates(df, by=["sex", "race"], outcome="selected"))
+    assert out.attrs["benchmark_rate"] == pytest.approx(0.5)  # (m, x), not (unknown, x)
+
+
 def test_missing_rate_column_raises():
     with pytest.raises(KeyError):
         impact_ratios(pd.DataFrame({"g": ["a"]}))
