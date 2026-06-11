@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aedt-audit"
+version = "0.1.0"
+description = "Bias-audit artifacts for automated employment decision tools (AEDTs): NYC Local Law 144 selection/scoring rates and impact ratios, EEOC four-fifths adverse-impact tables, and a score-traceability report schema."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Tobias Canavesi" }]
+keywords = [
+  "bias-audit",
+  "LL144",
+  "AEDT",
+  "adverse-impact",
+  "four-fifths",
+  "responsible-ai",
+  "hiring",
+  "fairness",
+  "compliance",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Legal Industry",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Office/Business",
+]
+dependencies = ["pandas>=1.5", "numpy>=1.23", "tabulate>=0.9"]
+
+[project.optional-dependencies]
+schema = ["jsonschema>=4.0"]
+dev = ["pytest>=7.0", "pytest-cov", "ruff>=0.4", "jsonschema>=4.0"]
+
+[project.urls]
+Homepage = "https://github.com/tobiascanavesi/aedt-audit"
+Issues = "https://github.com/tobiascanavesi/aedt-audit/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aedt_audit"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

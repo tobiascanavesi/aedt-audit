@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tobiascanavesi/aedt-audit/schemas/score_traceability.schema.json",
+  "title": "AEDT score-traceability record",
+  "description": "A per-decision provenance record for an automated employment decision tool: enough information for an auditor to reconstruct how a score was produced, without containing the scoring method itself. References to candidates and reviewers are opaque identifiers - no PII belongs in this record.",
+  "type": "object",
+  "required": ["record_id", "timestamp", "tool", "subject_ref", "score", "factors"],
+  "additionalProperties": false,
+  "properties": {
+    "record_id": {
+      "type": "string",
+      "description": "Unique identifier of this decision record."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the score was produced (RFC 3339)."
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "model_ref": {
+          "type": "string",
+          "description": "Opaque reference to the exact model artifact (hash, registry id)."
+        }
+      }
+    },
+    "subject_ref": {
+      "type": "string",
+      "description": "Opaque identifier of the individual assessed. Never a name, email, or other PII."
+    },
+    "position_ref": {
+      "type": "string",
+      "description": "Opaque identifier of the role or requisition."
+    },
+    "score": {
+      "type": "object",
+      "required": ["value"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "scale_min": { "type": "number" },
+        "scale_max": { "type": "number" }
+      }
+    },
+    "factors": {
+      "type": "array",
+      "description": "Per-factor contributions to the score, in the tool's own factor vocabulary.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "contribution"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "contribution": {
+            "type": "number",
+            "description": "Signed contribution of this factor to the final score."
+          },
+          "weight": { "type": "number" },
+          "input_ref": {
+            "type": "string",
+            "description": "Opaque reference to the input evidence used for this factor."
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "description": "Hard rules applied before/after scoring (knockouts, minimums), with outcomes.",
+      "items": {
+        "type": "object",
+        "required": ["name", "passed"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "human_review": {
+      "type": "object",
+      "description": "Any human intervention on this decision.",
+      "additionalProperties": false,
+      "properties": {
+        "occurred": { "type": "boolean" },
+        "reviewer_ref": { "type": "string" },
+        "action": { "type": "string", "enum": ["confirmed", "overridden", "escalated"] },
+        "reason": { "type": "string" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "description": "Provenance of the record itself.",
+      "additionalProperties": false,
+      "properties": {
+        "software": { "type": "string" },
+        "software_version": { "type": "string" },
+        "schema_version": { "type": "string" }
+      }
+    }
+  }
+}
