@@ -32,6 +32,7 @@ want bias checks in CI before a tool ever reaches production.
   - [3. The output](#3-the-output)
   - [4. How to read the tables](#4-how-to-read-the-tables)
 - [Scoring tools (continuous scores)](#scoring-tools-continuous-scores)
+- [Monitoring over time (lifecycle audits)](#monitoring-over-time-lifecycle-audits)
 - [What it computes](#what-it-computes)
 - [Score traceability](#score-traceability)
 - [Scope — what this is and is not](#scope--what-this-is-and-is-not)
@@ -173,6 +174,65 @@ summary = ll144_summary(applicants, score="score")
 summary.sample_median   # the median the rates are measured against
 ```
 
+## Monitoring over time (lifecycle audits)
+
+A single audit is a snapshot. But LL144 requires a **new bias audit every year**,
+and the NIST AI RMF treats evaluation of consequential AI as a *continuous*
+Measure/Manage activity. The two questions that only a longitudinal view can
+answer are: *is this tool getting closer to tripping the four-fifths rule, and
+are its disparities widening or narrowing?*
+
+`audit_lifecycle` runs the same audit across successive periods and adds two
+diagnostics on top of the impact ratios you already get — no new legal math, just
+a subtraction and a distance:
+
+- **Boundary margin** — the worst benchmarked group's distance to the four-fifths
+  line (`worst_impact_ratio − 0.8`). Positive clears the rule with room to spare;
+  negative is evidence of adverse impact, and its size says *how far past*.
+- **Profile drift** — how much the whole impact-ratio vector moved since the
+  previous period, `(1/√n)·‖ratios(t) − ratios(t−h)‖₂`. Rising drift means the
+  tool's behaviour toward groups is changing, in either direction.
+
+Each period is also flagged for review when adverse impact is present, when the
+tool **crosses** the 0.8 line versus the prior year, or when drift exceeds an
+optional threshold *you* document (there is no built-in drift threshold).
+
+```python
+from aedt_audit import audit_lifecycle, synthetic_lifecycle
+
+# five yearly pools; injected bias against one group worsens −2 → −10 (synthetic)
+periods = synthetic_lifecycle(periods=5, seed=0)
+
+report = audit_lifecycle(periods, outcome="selected", drift_alert=0.05)
+print(report.to_markdown())     # one time-series table per grouping
+report.triggers()               # just the periods needing review
+```
+
+The **sex** grouping recovers the ground truth we injected — a tool that was fine
+in 2021 and drifts into adverse impact, tripping four-fifths in 2022:
+
+| period | worst_group | worst_ratio | boundary_margin | adverse_impact | drift | crossed_four_fifths | review |
+|-------:|:------------|------------:|----------------:|:---------------|------:|:--------------------|:-------|
+| 2021 | female | 0.85 |  0.05 | False |      | False | False |
+| 2022 | female | 0.73 | -0.07 | True  | 0.09 | True  | True  |
+| 2023 | female | 0.65 | -0.15 | True  | 0.06 | False | True  |
+| 2024 | female | 0.54 | -0.26 | True  | 0.07 | False | True  |
+| 2025 | female | 0.45 | -0.35 | True  | 0.06 | False | True  |
+
+`report.to_json()`, `.to_dataframe()` (tidy long form), and `.save_csvs(dir)` are
+also available, mirroring the single-period summary.
+
+**Methodology & scope.** The lifecycle layer follows Andrea Ferrario,
+*A Methodology for Auditable Trustworthiness Levels in AI Lifecycle Governance*
+(2026, [arXiv:2607.16130](https://arxiv.org/abs/2607.16130)), which represents a
+system's state as a *trustworthiness profile* over time and monitors it with a
+boundary margin and a profile drift. Here that profile is the vector of LL144
+impact ratios, and the only threshold is the statutory EEOC 0.8 — the continuous
+margin supplies the nuance without inventing any non-statutory band. Consistent
+with this package's scope, we **do not** adopt the paper's learned decision-tree
+rule or arbitrary expert-defined levels: those require scoring/ML logic and
+expert-labelled data this toolkit deliberately does not touch.
+
 ## What it computes
 
 | Artifact | Definition source |
@@ -183,6 +243,8 @@ summary.sample_median   # the median the rates are measured against
 | Small-category (<2%) exclusion, flagged and disclosed — never silently dropped | DCWP rules |
 | `unknown` demographic reporting (disclosed, not benchmarked) | DCWP rules |
 | Four-fifths adverse-impact flag (labeled as EEOC, since LL144 sets no threshold) | 29 CFR § 1607.4(D) |
+| Boundary margin (worst impact ratio − 0.8) across audit periods | Ferrario 2026 methodology, grounded on EEOC 0.8 |
+| Profile drift (change in the impact-ratio vector between periods) | Ferrario 2026 methodology / NIST AI RMF *Measure/Manage* |
 | Score-traceability record schema (JSON Schema, per-decision provenance) | NIST AI RMF *Measure/Manage* practice |
 
 ## Score traceability

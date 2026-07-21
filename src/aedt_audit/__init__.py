@@ -10,12 +10,13 @@ be conducted by an independent auditor. Nothing here is legal advice.
 """
 
 from .impact import FOUR_FIFTHS, four_fifths, impact_ratios
+from .lifecycle import LifecyclePoint, LifecycleReport, audit_lifecycle
 from .rates import DEFAULT_MIN_CATEGORY_SHARE, UNKNOWN, scoring_rates, selection_rates
 from .report import AuditMetadata, LL144Summary, ll144_summary
-from .synth import synthetic_applicants
+from .synth import synthetic_applicants, synthetic_lifecycle
 from .traceability import example_record, load_schema, validate_record
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "DEFAULT_MIN_CATEGORY_SHARE",
@@ -23,7 +24,10 @@ __all__ = [
     "UNKNOWN",
     "AuditMetadata",
     "LL144Summary",
+    "LifecyclePoint",
+    "LifecycleReport",
     "__version__",
+    "audit_lifecycle",
     "example_record",
     "four_fifths",
     "impact_ratios",
@@ -32,5 +36,6 @@ __all__ = [
     "scoring_rates",
     "selection_rates",
     "synthetic_applicants",
+    "synthetic_lifecycle",
     "validate_record",
 ]
