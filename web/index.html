@@ -203,28 +203,16 @@ footer p{margin:0 0 6px;max-width:60em}
 "use strict";
 const $ = (id) => document.getElementById(id);
 const PY_SETUP = String.raw`
-import io, json
+import json
 import pandas as pd
-from aedt_audit import AuditMetadata, audit_lifecycle, ll144_summary, synthetic_applicants
+from aedt_audit import AuditMetadata, audit_lifecycle, benchmark_mask, ll144_summary, synthetic_applicants
+from aedt_audit.inputs import drop_missing, missing_note, read_table, split_periods
 
 _df = None
 
-def _read_csv(path):
-    for enc in ("utf-8-sig", "cp1252", "latin-1"):
-        try:
-            return pd.read_csv(path, encoding=enc)
-        except UnicodeDecodeError:
-            continue
-    return pd.read_csv(path, encoding="latin-1")
-
 def load_file(path, name):
     global _df
-    low = name.lower()
-    if low.endswith((".xlsx", ".xlsm", ".xls")):
-        _df = pd.read_excel(path)
-    else:
-        _df = _read_csv(path)
-    _df.columns = [str(c) for c in _df.columns]
+    _df = read_table(path, name=name)
     return describe()
 
 def load_sample():
@@ -246,34 +234,33 @@ def describe():
     return json.dumps({"rows": int(len(_df)), "columns": cols})
 
 def missing_count(col):
-    return int(_df[col].isna().sum())
+    _, dropped = drop_missing(_df, col)
+    return dropped
+
+def _append(meta, note):
+    meta.notes = (meta.notes + " " + note).strip()
 
 def run(opts_json):
     opts = json.loads(opts_json)
     df = _df
     value_col = opts["outcome"] if opts["kind"] == "outcome" else opts["score"]
-    dropped = 0
-    if opts.get("drop_missing"):
-        keep = df[value_col].notna()
-        dropped = int((~keep).sum())
-        df = df[keep]
-    kw = {opts["kind"]: value_col}
+    what = "decision" if opts["kind"] == "outcome" else "score"
     meta = AuditMetadata(**{k: v for k, v in opts.get("metadata", {}).items() if v})
-    if dropped:
-        what = "decision" if opts["kind"] == "outcome" else "score"
-        note = f"{dropped} row(s) with no recorded {what} were left out of this analysis."
-        meta.notes = (meta.notes + " " if meta.notes else "") + note
-    out = {"dropped": dropped}
+    out = {"dropped": 0, "no_period": 0, "order": ""}
+    if opts.get("drop_missing"):
+        df, out["dropped"] = drop_missing(df, value_col)
+        if out["dropped"]:
+            _append(meta, missing_note(out["dropped"], what))
+    kw = {opts["kind"]: value_col}
     period = opts.get("period")
     if period:
-        has_period = df[period].notna()
-        out["no_period"] = int((~has_period).sum())
-        df = df[has_period]
-        labels = list(dict.fromkeys(str(v) for v in df[period]))
-        periods = {lab: df[df[period].astype(str) == lab].drop(columns=[period]) for lab in labels}
-        report = audit_lifecycle(
-            periods, sex=opts["sex"], race=opts["race"], metadata=meta, **kw
-        )
+        split = split_periods(df, period)
+        out["no_period"] = split.no_period
+        out["order"] = split.order
+        out["periods"] = list(split.periods)
+        if split.no_period:
+            _append(meta, f"{split.no_period} row(s) with no recorded {period} were left out of this analysis.")
+        report = audit_lifecycle(split.periods, sex=opts["sex"], race=opts["race"], metadata=meta, **kw)
         out["kind"] = "lifecycle"
         out["fragment"] = report.to_html(fragment=True)
         out["html"] = report.to_html()
@@ -290,7 +277,6 @@ def run(opts_json):
             df, sex=opts["sex"], race=opts["race"], metadata=meta,
             significance=bool(opts.get("significance")), **kw
         )
-        from aedt_audit import benchmark_mask
         out["kind"] = "summary"
         out["fragment"] = summary.to_html(fragment=True)
         out["html"] = summary.to_html()
@@ -331,8 +317,12 @@ async function boot() {
         installed = true;
       }
     } catch (e) { /* no local wheel: fall back to PyPI */ }
-    if (!installed) await micropip.install(["aedt-audit", "tabulate"]);
-    pyodide.runPython(PY_SETUP);
+    if (!installed) await micropip.install(["aedt-audit>=0.3,<0.4", "tabulate"]);
+    try {
+      pyodide.runPython(PY_SETUP);
+    } catch (e) {
+      throw new Error("the installed aedt-audit package is too old for this page (needs 0.3): " + pyMessage(e));
+    }
     const version = pyodide.runPython("import aedt_audit; aedt_audit.__version__");
     $("ver").textContent = "v" + version;
     ready = true;
@@ -340,7 +330,11 @@ async function boot() {
     if (pendingAction) { const a = pendingAction; pendingAction = null; a(); }
   } catch (e) {
     console.error(e);
-    engine("The analysis engine could not be loaded. Check your internet connection and reload the page. (" + (e && e.message ? e.message.split("\n")[0] : e) + ")");
+    const detail = e && e.message ? e.message.split("\n")[0] : String(e);
+    const hint = /too old|ImportError|cannot import/i.test(detail)
+      ? "This copy of the page needs a newer aedt-audit release."
+      : "Check your internet connection and reload the page.";
+    engine("The analysis engine could not be loaded. " + hint + " (" + detail + ")");
   }
 }
 let pendingAction = null;
@@ -370,7 +364,7 @@ async function useFile(file) {
       $("fileinfo").hidden = false;
       $("fileinfo").textContent = "Reading " + file.name + "…";
       const low = file.name.toLowerCase();
-      if (low.endsWith(".xlsx") || low.endsWith(".xlsm") || low.endsWith(".xls")) {
+      if (low.endsWith(".xlsx") || low.endsWith(".xlsm")) {
         engine("Adding spreadsheet support (one time)…");
         await pyodide.pyimport("micropip").install("openpyxl");
         engine("Ready. Everything from here on runs on this computer.", true);
@@ -545,7 +539,8 @@ function showReport(out, opts) {
   }
   const notes = [];
   if (out.dropped) notes.push(out.dropped.toLocaleString() + " rows with no recorded " + (opts.kind === "outcome" ? "decision" : "score") + " were left out, and the report says so.");
-  if (out.no_period) notes.push(out.no_period.toLocaleString() + " rows with no audit period were left out.");
+  if (out.no_period) notes.push(out.no_period.toLocaleString() + " rows with no audit period were left out, and the report says so.");
+  if (out.order) notes.push("Periods ordered by " + out.order + ": " + out.periods.join(", ") + (out.order === "chronological" ? "." : ". If that is not the real order, sort the file by period first."));
   notes.push(out.kind === "lifecycle"
     ? (out.flagged ? out.flagged + " grouping-period(s) are flagged for review." : "No period is flagged for review.")
     : (out.flagged ? out.flagged + " benchmarked categor" + (out.flagged === 1 ? "y falls" : "ies fall") + " below the four-fifths line." : "No benchmarked category falls below the four-fifths line."));

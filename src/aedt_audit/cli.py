@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import zipfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -23,17 +24,17 @@ import pandas as pd
 
 from . import __version__
 from .impact import benchmark_mask
+from .inputs import drop_missing, missing_note, parse_period_args, read_table, split_periods
 from .lifecycle import audit_lifecycle
 from .rates import DEFAULT_MIN_CATEGORY_SHARE
 from .report import AuditMetadata, ll144_summary
 
 EXIT_OK = 0
 EXIT_ERROR = 1
-EXIT_USAGE = 2
+EXIT_USAGE = 2  # what argparse uses for parser.error()
 EXIT_FINDING = 3
 
 _FORMATS = ("markdown", "html", "json", "csv")
-_EXCEL = (".xlsx", ".xlsm", ".xls")
 
 
 def _share(text: str) -> float:
@@ -69,7 +70,7 @@ def _add_shared(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--drop-missing-outcome",
         action="store_true",
-        help="leave out rows whose outcome/score is missing instead of stopping; "
+        help="leave out rows whose outcome/score is missing or blank instead of stopping; "
         "the count is reported and noted in the report",
     )
     out = p.add_argument_group("output")
@@ -79,7 +80,12 @@ def _add_shared(p: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="file to write (markdown/html/json) or directory (csv); default: stdout",
     )
-    out.add_argument("--decimals", type=int, default=2, help="decimals for rates (default: 2)")
+    out.add_argument(
+        "--decimals",
+        type=int,
+        default=2,
+        help="decimals for rates in markdown/html output (default: 2); json keeps 4",
+    )
     meta = p.add_argument_group("report details")
     meta.add_argument("--tool-name", default="")
     meta.add_argument("--tool-version", default="")
@@ -107,7 +113,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="the three LL144 tables for one audit period",
         description="Compute the sex, race/ethnicity and intersectional tables for one data set.",
     )
-    s.add_argument("data", metavar="FILE", help="CSV (or .xlsx) with one row per person assessed")
+    s.add_argument(
+        "data",
+        metavar="FILE",
+        help="one row per person assessed; .csv, or .xlsx with the 'excel' extra installed",
+    )
     _add_shared(s)
     s.add_argument(
         "--significance",
@@ -135,8 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
     lc.add_argument(
         "--period-col",
         metavar="COL",
-        help="with a single FILE: the column holding the period label; periods are ordered "
-        "by first appearance",
+        help="with a single FILE: the column holding the period label. Integer or date "
+        "labels are ordered chronologically; other labels keep their order of first "
+        "appearance in the file",
     )
     lc.add_argument(
         "--horizon", type=int, default=1, metavar="H", help="drift horizon (default: 1)"
@@ -159,30 +170,8 @@ def build_parser() -> argparse.ArgumentParser:
 # --------------------------------------------------------------------------- #
 
 
-def _read(path: str) -> pd.DataFrame:
-    file = Path(path)
-    if not file.exists():
-        raise FileNotFoundError(f"no such file: {path}")
-    if file.suffix.lower() in _EXCEL:
-        return pd.read_excel(file)
-    for enc in ("utf-8-sig", "cp1252", "latin-1"):
-        try:
-            return pd.read_csv(file, encoding=enc)
-        except UnicodeDecodeError:
-            continue
-    return pd.read_csv(file, encoding="latin-1")
-
-
-def _drop_missing(df: pd.DataFrame, col: str, enabled: bool, meta: AuditMetadata) -> pd.DataFrame:
-    if not enabled or col not in df.columns:
-        return df
-    keep = df[col].notna()
-    dropped = int((~keep).sum())
-    if dropped:
-        print(f"note: {dropped} row(s) with no recorded {col!r} were left out", file=sys.stderr)
-        note = f"{dropped} row(s) with no recorded {col} were left out of this analysis."
-        meta.notes = f"{meta.notes} {note}".strip()
-    return df[keep]
+def _note(message: str) -> None:
+    print(f"note: {message}", file=sys.stderr)
 
 
 def _metadata(args: argparse.Namespace) -> AuditMetadata:
@@ -196,13 +185,15 @@ def _metadata(args: argparse.Namespace) -> AuditMetadata:
     )
 
 
+def _append_note(meta: AuditMetadata, note: str) -> None:
+    meta.notes = f"{meta.notes} {note}".strip()
+
+
 def _emit(report, args: argparse.Namespace) -> None:
     fmt = args.format
     if fmt == "csv":
-        if not args.out:
-            raise ValueError("--format csv needs --out DIRECTORY")
         for path in report.save_csvs(args.out):
-            print(path, file=sys.stderr)
+            print(f"wrote {path}", file=sys.stderr)
         return
     if fmt == "markdown":
         text = report.to_markdown(decimals=args.decimals)
@@ -212,6 +203,8 @@ def _emit(report, args: argparse.Namespace) -> None:
         text = report.to_json()
     if args.out:
         target = Path(args.out)
+        if target.is_dir():
+            raise ValueError(f"--out {args.out} is a directory; give a file name for {fmt}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
         print(f"wrote {target}", file=sys.stderr)
@@ -221,23 +214,17 @@ def _emit(report, args: argparse.Namespace) -> None:
         print(text)
 
 
-def _parse_periods(items: Sequence[str]) -> list[tuple[str, str]]:
-    pairs = []
-    for item in items:
-        label, sep, path = item.partition("=")
-        if not sep:
-            path, label = item, Path(item).stem
-        pairs.append((label, path))
-    return pairs
-
-
 def _run_summary(args: argparse.Namespace) -> int:
     meta = _metadata(args)
-    df = _read(args.data)
+    frame = read_table(args.data)
     value_col = args.outcome if args.outcome is not None else args.score
-    df = _drop_missing(df, value_col, args.drop_missing_outcome, meta)
+    if args.drop_missing_outcome:
+        frame, dropped = drop_missing(frame, value_col)
+        if dropped:
+            _note(f"{dropped} row(s) with no recorded {value_col!r} were left out")
+            _append_note(meta, missing_note(dropped, value_col))
     summary = ll144_summary(
-        df,
+        frame,
         sex=args.sex,
         race=args.race,
         outcome=args.outcome,
@@ -266,28 +253,41 @@ def _run_lifecycle(args: argparse.Namespace) -> int:
     meta = _metadata(args)
     value_col = args.outcome if args.outcome is not None else args.score
     if args.period_col:
-        if len(args.periods) != 1:
-            raise ValueError("--period-col takes exactly one FILE")
-        df = _read(args.periods[0])
-        if args.period_col not in df.columns:
-            raise KeyError(f"period column {args.period_col!r} not in data")
-        has_period = df[args.period_col].notna()
-        if int((~has_period).sum()):
-            print(
-                f"note: {int((~has_period).sum())} row(s) with no period were left out",
-                file=sys.stderr,
+        frame = read_table(args.periods[0])
+        if args.drop_missing_outcome:
+            frame, dropped = drop_missing(frame, value_col)
+            if dropped:
+                _note(f"{dropped} row(s) with no recorded {value_col!r} were left out")
+                _append_note(meta, missing_note(dropped, value_col))
+        split = split_periods(frame, args.period_col)
+        if split.no_period:
+            _note(f"{split.no_period} row(s) with no {args.period_col!r} were left out")
+            _append_note(
+                meta,
+                f"{split.no_period} row(s) with no recorded {args.period_col} were left out "
+                "of this analysis.",
             )
-            df = df[has_period]
-        df = _drop_missing(df, value_col, args.drop_missing_outcome, meta)
-        labels = list(dict.fromkeys(str(v) for v in df[args.period_col]))
-        periods = {
-            label: df[df[args.period_col].astype(str) == label].drop(columns=[args.period_col])
-            for label in labels
-        }
+        _note(f"periods ordered by {split.order}: {', '.join(split.periods)}")
+        if split.order != "chronological":
+            _note("if that is not the audit chronology, sort the file or pass LABEL=FILE pairs")
+        periods = split.periods
     else:
         periods = {}
-        for label, path in _parse_periods(args.periods):
-            periods[label] = _drop_missing(_read(path), value_col, args.drop_missing_outcome, meta)
+        dropped_by_label: dict[str, int] = {}
+        for label, path in parse_period_args(args.periods):
+            frame = read_table(path)
+            if args.drop_missing_outcome:
+                frame, dropped = drop_missing(frame, value_col)
+                if dropped:
+                    dropped_by_label[label] = dropped
+            periods[label] = frame
+        if dropped_by_label:
+            _note(
+                "rows with no recorded "
+                f"{value_col!r} were left out: "
+                + ", ".join(f"{k}: {v}" for k, v in dropped_by_label.items())
+            )
+            _append_note(meta, missing_note(dropped_by_label, value_col))
     report = audit_lifecycle(
         periods,
         sex=args.sex,
@@ -308,14 +308,32 @@ def _run_lifecycle(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _validate_usage(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Mistakes in how the command was invoked exit 2, like any other usage error."""
+    if args.format == "csv" and not args.out:
+        parser.error("--format csv needs --out DIRECTORY")
+    if args.command == "lifecycle" and args.period_col and len(args.periods) != 1:
+        parser.error("--period-col takes exactly one FILE")
+    if args.command == "lifecycle" and args.horizon < 1:
+        parser.error("--horizon must be a positive integer")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    _validate_usage(parser, args)
     try:
         if args.command == "summary":
             return _run_summary(args)
         return _run_lifecycle(args)
-    except (ValueError, KeyError, FileNotFoundError, pd.errors.ParserError, ImportError) as exc:
+    except (
+        ValueError,
+        KeyError,
+        OSError,
+        ImportError,
+        zipfile.BadZipFile,
+        pd.errors.ParserError,
+    ) as exc:
         message = exc.args[0] if exc.args else str(exc)
         print(f"error: {message}", file=sys.stderr)
         return EXIT_ERROR

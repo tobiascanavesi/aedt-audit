@@ -57,7 +57,8 @@ after that your browser keeps a copy. You can also save the page
 ## Installation
 
 ```bash
-pip install aedt-audit            # core
+pip install aedt-audit            # core, including the aedt-audit command
+pip install 'aedt-audit[excel]'   # + .xlsx input
 pip install 'aedt-audit[schema]'  # + traceability-record validation
 ```
 
@@ -220,13 +221,13 @@ measured against. The **sex** table on the demo data, with the new columns:
 
 | sex     |    n |   selected |   rate |   impact_ratio | adverse_impact_eeoc   |   z_score | p_value   | significant_2sd   | small_sample   |   selections_to_four_fifths |
 |:--------|-----:|-----------:|-------:|---------------:|:----------------------|----------:|:----------|:------------------|:---------------|----------------------------:|
-| female  | 2441 |        510 |   0.21 |          0.544 | True                  |    -13.35 | <0.001    | True              | False          |                         240 |
-| male    | 2409 |        925 |   0.38 |          1     | False                 |      0    | 1.000     | False             | False          |                           0 |
-| unknown |  150 |         65 |   0.43 |          1.129 | False                 |      1.2  | 0.228     | False             | False          |                           0 |
+| female  | 2441 |        510 |   0.21 |          0.544 | True                  |   -13.354 | <0.001    | True              | False          |                         240 |
+| male    | 2409 |        925 |   0.38 |          1     | False                 |     0     | 1.000     | False             | False          |                           0 |
+| unknown |  150 |         65 |   0.43 |          1.129 | False                 |     1.204 | 0.228     | False             | False          |                           0 |
 
 - **`z_score`** — how many standard deviations the category's rate sits from the
   benchmark's; negative means lower. Beyond about −2 the gap is unlikely to be
-  chance. Women here: -13.4 standard deviations below men.
+  chance. Women here: 13.4 standard deviations below men.
 - **`p_value`** — the probability of a gap at least this large if selection were
   in fact equal (two-sided).
 - **`significant_2sd`** — the category is two or more standard deviations *below*

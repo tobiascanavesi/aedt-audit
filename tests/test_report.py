@@ -1,4 +1,5 @@
 import json
+from html.parser import HTMLParser
 
 import pytest
 
@@ -127,29 +128,70 @@ def test_to_dataframe_is_tidy_long_form(pool):
     assert df.loc[df["grouping"] == "sex", "race_ethnicity"].isna().all()
 
 
-def test_html_is_a_complete_self_contained_document_with_charts(pool):
-    from html.parser import HTMLParser
+class _Balanced(HTMLParser):
+    """Checks that non-void tags nest properly and that every id is unique."""
 
+    VOID = {"meta", "br", "hr", "img", "input", "link", "path", "line", "rect", "circle"}
+
+    def __init__(self):
+        super().__init__()
+        self.stack, self.ids, self.problems = [], set(), []
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if name == "id":
+                if value in self.ids:
+                    self.problems.append(f"duplicate id {value!r}")
+                self.ids.add(value)
+        if tag not in self.VOID:
+            self.stack.append(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in self.VOID:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        if not self.stack or self.stack[-1] != tag:
+            self.problems.append(f"unexpected </{tag}> (open: {self.stack[-3:]})")
+        else:
+            self.stack.pop()
+
+
+def assert_well_formed(html):
+    parser = _Balanced()
+    parser.feed(html)
+    parser.close()
+    assert not parser.problems, parser.problems[:5]
+    assert not parser.stack, parser.stack
+
+
+def test_html_is_a_complete_self_contained_document_with_charts(pool):
     html = ll144_summary(
         pool, outcome="selected", significance=True, metadata=AuditMetadata(tool_name="t-1")
     ).to_html()
     assert html.startswith("<!doctype html>")
-    assert "<script" not in html and "http" not in html.split("<body>")[1].replace(
-        "http://www.w3.org/2000/svg", ""
-    )
+    body = html.split("<body>")[1].replace("http://www.w3.org/2000/svg", "")
+    assert "<script" not in html and "http" not in body
     assert html.count("<svg") == 3
     assert "Individuals assessed" in html and "How to read this" in html
     assert "Castaneda" in html  # the significance note travels with the columns
     assert "<title>t-1 — Bias-audit summary (selection rates)</title>" in html
+    assert_well_formed(html)
+    # the legal notes render identifiers as code, not as literal backticks
+    assert "<code>adverse_impact_eeoc</code>" in html and "`adverse_impact_eeoc`" not in html
 
-    class Strict(HTMLParser):
-        def error(self, message):  # pragma: no cover
-            raise AssertionError(message)
-
-    Strict().feed(html)
     fragment = ll144_summary(pool, outcome="selected").to_html(fragment=True)
     assert "<html" not in fragment and fragment.lstrip().startswith("<style>")
     assert fragment.count("<svg") == 3
+    assert "body{" not in fragment  # embedding must not restyle the host page
+    assert "body{margin:0}" in html
+
+
+def test_well_formedness_check_catches_bad_markup():
+    parser = _Balanced()
+    parser.feed('<div id="a"><span id="a"></div>')
+    assert len(parser.problems) == 2
 
 
 def test_html_table_marks_flagged_and_dimmed_rows():
@@ -167,3 +209,13 @@ def test_html_table_marks_flagged_and_dimmed_rows():
     assert '<tr class="flag"><td class="cat">f</td>' in sex_section
     assert '<tr class="dim"><td class="cat">unknown</td>' in sex_section
     assert "◆ yes" in sex_section
+
+
+def test_tiny_p_values_are_floored_in_markdown_and_kept_exact_in_json(pool):
+    summary = ll144_summary(pool, outcome="selected", significance=True)
+    sex_table = summary.to_markdown().split("## sex")[1].split("##")[0]
+    assert "<0.001" in sex_table  # not a literal 0
+    payload = json.loads(summary.to_json())
+    female = next(r for r in payload["tables"]["sex"] if r["sex"] == "female")
+    assert 0 < female["p_value"] < 1e-6  # full precision, not rounded to 0.0
+    assert female["rate"] == round(female["rate"], 4)

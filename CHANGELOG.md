@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   ratio of 0.796 is no longer displayed as `0.80` beside an adverse-impact flag.
 
 ### Added
+- `aedt_audit.inputs`: the file reading, missing-value and period-splitting rules
+  shared by the command line and the browser app (CSV encodings, blank cells as
+  missing, chronological ordering of integer/date period labels, duplicate-label
+  rejection). `excel` extra for `.xlsx` input.
 - `aedt-audit` command line (`summary` and `lifecycle`): Markdown, HTML, JSON or
   CSV output to stdout or a path, `--significance`, `--drop-missing-outcome`,
   `LABEL=FILE` periods or `--period-col`, and CI gates `--fail-on-adverse-impact`

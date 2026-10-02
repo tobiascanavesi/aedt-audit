@@ -12,6 +12,7 @@ table beside the chart.
 from __future__ import annotations
 
 import math
+import zlib
 from collections.abc import Sequence
 from html import escape
 
@@ -69,11 +70,14 @@ def _text_w(text: str, size: float = 13.0) -> float:
 
 
 def _svg_open(width: int, height: int, title: str, desc: str) -> str:
+    # ids derive from the title so several charts in one document never collide,
+    # and the output stays deterministic across runs.
+    uid = f"{zlib.crc32(title.encode('utf-8')):08x}"
     return (
         f'<svg class="aedt-chart" xmlns="http://www.w3.org/2000/svg" role="img" '
         f'viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
-        f'style="max-width:100%;height:auto" aria-labelledby="t d">'
-        f'<title id="t">{escape(title)}</title><desc id="d">{escape(desc)}</desc>'
+        f'style="max-width:100%;height:auto" aria-labelledby="t-{uid} d-{uid}">'
+        f'<title id="t-{uid}">{escape(title)}</title><desc id="d-{uid}">{escape(desc)}</desc>'
         f"<style>{CHART_STYLE}</style>"
     )
 

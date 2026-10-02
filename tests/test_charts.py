@@ -1,6 +1,7 @@
 """The SVG charts: well-formed, deterministic, and never colour-only."""
 
 import math
+import re
 import xml.etree.ElementTree as ET
 
 import pandas as pd
@@ -136,3 +137,13 @@ def test_chart_style_defines_both_colour_schemes(mode):
     svg = impact_ratio_chart(table())
     assert "prefers-color-scheme:dark" in svg
     assert "--alert:#d03b3b" in svg  # status colour, paired with the ◆ marker
+
+
+def test_chart_ids_are_unique_per_title_and_deterministic():
+    a = impact_ratio_chart(table(), title="Impact ratios by sex")
+    b = impact_ratio_chart(table(), title="Impact ratios by race/ethnicity")
+    ids_a = set(re.findall(r'id="([^"]+)"', a))
+    ids_b = set(re.findall(r'id="([^"]+)"', b))
+    assert len(ids_a) == 2 and ids_a.isdisjoint(ids_b)
+    labelled = ET.fromstring(a).get("aria-labelledby").split()
+    assert set(labelled) == ids_a

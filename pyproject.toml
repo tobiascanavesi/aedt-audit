@@ -40,7 +40,8 @@ dependencies = ["pandas>=1.5", "numpy>=1.23", "tabulate>=0.9"]
 
 [project.optional-dependencies]
 schema = ["jsonschema>=4.0"]
-dev = ["pytest>=7.0", "pytest-cov", "ruff>=0.4", "jsonschema>=4.0"]
+excel = ["openpyxl>=3.1"]
+dev = ["pytest>=7.0", "pytest-cov", "ruff>=0.4", "jsonschema>=4.0", "openpyxl>=3.1"]
 
 [project.scripts]
 aedt-audit = "aedt_audit.cli:main"

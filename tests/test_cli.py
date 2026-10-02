@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from aedt_audit import synthetic_applicants, synthetic_lifecycle
-from aedt_audit.cli import EXIT_ERROR, EXIT_FINDING, EXIT_OK, main
+from aedt_audit.cli import EXIT_ERROR, EXIT_FINDING, EXIT_OK, EXIT_USAGE, main
 
 
 @pytest.fixture()
@@ -89,9 +89,9 @@ def test_json_and_html_to_files_create_parent_dirs(biased_csv, tmp_path):
 
 
 def test_csv_format_writes_three_files_and_needs_out(biased_csv, tmp_path, capsys):
-    assert (
-        main(["summary", str(biased_csv), "--outcome", "selected", "--format", "csv"]) == EXIT_ERROR
-    )
+    with pytest.raises(SystemExit) as exc:  # a usage error, like any other argparse mistake
+        main(["summary", str(biased_csv), "--outcome", "selected", "--format", "csv"])
+    assert exc.value.code == EXIT_USAGE
     assert "--out" in capsys.readouterr().err
     target = tmp_path / "csvs"
     assert (
@@ -223,10 +223,9 @@ def test_lifecycle_from_period_column_keeps_first_appearance_order(tmp_path, cap
     assert code in (EXIT_OK, EXIT_FINDING)
     payload = json.loads(capsys.readouterr().out)
     assert [p["period"] for p in payload["series"]["sex"]] == ["Q4 2024", "Q1 2025", "Q2 2025"]
-    assert (
+    with pytest.raises(SystemExit) as exc:  # exactly one file with --period-col: usage error
         main(["lifecycle", str(path), str(path), "--period-col", "period", "--outcome", "selected"])
-        == EXIT_ERROR
-    )  # exactly one file with --period-col
+    assert exc.value.code == EXIT_USAGE
     assert (
         main(["lifecycle", str(path), "--period-col", "nope", "--outcome", "selected"])
         == EXIT_ERROR
@@ -254,4 +253,65 @@ def test_lifecycle_fail_on_review(tmp_path):
             ]
         )
         == EXIT_FINDING
+    )
+
+
+def test_io_failures_exit_1_with_a_message_not_a_traceback(biased_csv, tmp_path, capsys):
+    assert main(["summary", str(tmp_path), "--outcome", "selected"]) == EXIT_ERROR
+    assert "directory" in capsys.readouterr().err
+    code = main(["summary", str(biased_csv), "--outcome", "selected", "--out", str(tmp_path)])
+    assert code == EXIT_ERROR and "is a directory" in capsys.readouterr().err
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x")
+    target = str(blocker / "r.md")
+    code = main(["summary", str(biased_csv), "--outcome", "selected", "--out", target])
+    assert code == EXIT_ERROR and "error:" in capsys.readouterr().err
+    bad = tmp_path / "bad.xlsx"
+    bad.write_bytes(b"not a zip")
+    assert main(["summary", str(bad), "--outcome", "selected"]) == EXIT_ERROR
+    assert "not a valid .xlsx" in capsys.readouterr().err
+
+
+def test_duplicate_period_labels_are_an_error(tmp_path, capsys):
+    df = synthetic_applicants(300, seed=0)
+    for sub in ("x", "y"):
+        (tmp_path / sub).mkdir()
+        df.to_csv(tmp_path / sub / "data.csv", index=False)
+    files = [str(tmp_path / "x" / "data.csv"), str(tmp_path / "y" / "data.csv")]
+    assert main(["lifecycle", *files, "--outcome", "selected"]) == EXIT_ERROR
+    assert "given twice" in capsys.readouterr().err
+
+
+def test_period_col_sorts_years_and_cleans_float_labels(tmp_path, capsys):
+    frames = [
+        df.assign(year=int(label)) for label, df in synthetic_lifecycle(3, seed=0, n=900).items()
+    ]
+    data = pd.concat(frames[::-1], ignore_index=True)  # newest first in the file
+    data.loc[data.index[:3], "year"] = None  # a few blanks -> pandas reads a float column
+    path = tmp_path / "years.csv"
+    data.to_csv(path, index=False)
+    argv = ["lifecycle", str(path), "--period-col", "year", "--outcome", "selected"]
+    assert main([*argv, "--format", "json"]) == EXIT_OK
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert [p["period"] for p in payload["series"]["sex"]] == ["2021", "2022", "2023"]
+    assert "3 row(s) with no 'year'" in captured.err
+    assert "3 row(s) with no recorded year" in payload["metadata"]["notes"]
+    assert "ordered by chronological" in captured.err
+
+
+def test_drop_missing_outcome_handles_blank_text_and_aggregates_per_period(tmp_path, capsys):
+    argv = ["lifecycle"]
+    for i, (label, df) in enumerate(synthetic_lifecycle(2, seed=0, n=400).items()):
+        df = df.copy()
+        df["selected"] = df["selected"].map({True: "Yes", False: "No"})
+        df.loc[df.index[: 2 + i], "selected"] = " "  # whitespace-only cells
+        p = tmp_path / f"{label}.csv"
+        df.to_csv(p, index=False)
+        argv.append(f"{label}={p}")
+    code = main([*argv, "--outcome", "selected", "--drop-missing-outcome", "--format", "json"])
+    assert code == EXIT_OK
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["metadata"]["notes"] == (
+        "Rows with no recorded selected were left out of this analysis (2021: 2, 2022: 3)."
     )

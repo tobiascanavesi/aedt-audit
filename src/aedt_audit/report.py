@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .impact import _METRIC_COLUMNS, four_fifths
+from .impact import _METRIC_COLUMNS, category_columns, four_fifths
 from .rates import DEFAULT_MIN_CATEGORY_SHARE, scoring_rates, selection_rates
 from .render import (
     DISCLAIMER,
@@ -46,16 +46,35 @@ class AuditMetadata:
     notes: str = ""
 
 
-_metadata_items = metadata_items
-_exclusion_note = exclusion_note
-
-
 def _round_table(table: pd.DataFrame, decimals: int, ratio_decimals: int) -> pd.DataFrame:
+    """Round for display: rates to ``decimals``, ratios and statistics to ``ratio_decimals``.
+
+    A p-value smaller than the displayable resolution is shown as ``<0.001``
+    (for three decimals) rather than as a literal ``0``.
+    """
     out = table.round(decimals)
     for col in RATIO_COLUMNS:
         if col in out.columns:
             out[col] = table[col].round(ratio_decimals)
+    if "p_value" in out.columns:
+        floor = 10.0**-ratio_decimals
+        out["p_value"] = table["p_value"].map(
+            lambda v: (
+                v
+                if pd.isna(v)
+                else (f"<{floor:.{ratio_decimals}f}" if v < floor else f"{v:.{ratio_decimals}f}")
+            )
+        )
     return out
+
+
+def _json_records(table: pd.DataFrame, decimals: int) -> list[dict]:
+    """Rows for JSON: rates rounded, but a p-value keeps its full precision (a
+    rounded 0.0 would misreport a tiny probability as impossible)."""
+    rounded = table.round(decimals)
+    if "p_value" in table.columns:
+        rounded["p_value"] = table["p_value"]
+    return rounded.to_dict(orient="records")
 
 
 def _json_safe(obj):
@@ -89,7 +108,7 @@ class LL144Summary:
 
     def to_markdown(self, *, decimals: int = 2, ratio_decimals: int = 3) -> str:
         parts = [f"# Bias-audit summary ({self.kind} rates)"]
-        meta = _metadata_items(self.metadata)
+        meta = metadata_items(self.metadata)
         if meta:
             parts.append("\n".join(f"- **{k}**: {v}" for k, v in meta.items()))
         if self.sample_median is not None:
@@ -97,7 +116,7 @@ class LL144Summary:
         for name, table in self.tables.items():
             parts.append(f"## {name.replace('_', '/')}")
             parts.append(_round_table(table, decimals, ratio_decimals).to_markdown(index=False))
-            note = _exclusion_note(table)
+            note = exclusion_note(table)
             if note:
                 parts.append(f"*{note}*")
         parts.extend(f"*{note}*" for note in self._notes())
@@ -119,10 +138,7 @@ class LL144Summary:
             "kind": self.kind,
             "metadata": asdict(self.metadata),
             "sample_median": self.sample_median,
-            "tables": {
-                name: table.round(decimals).to_dict(orient="records")
-                for name, table in self.tables.items()
-            },
+            "tables": {name: _json_records(table, decimals) for name, table in self.tables.items()},
         }
         return json.dumps(_json_safe(payload), indent=2)
 
@@ -136,7 +152,7 @@ class LL144Summary:
         out = pd.concat(frames, ignore_index=True, sort=False)
         cats: list[str] = []
         for table in self.tables.values():
-            cats.extend(c for c in table.columns if c not in _METRIC_COLUMNS and c not in cats)
+            cats.extend(c for c in category_columns(table) if c not in cats)
         first = next(iter(self.tables.values()))
         metrics = [c for c in first.columns if c in _METRIC_COLUMNS]
         return out[["grouping", *cats, *metrics]]
