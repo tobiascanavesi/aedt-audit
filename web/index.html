@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>aedt-audit — check a hiring tool for bias, in your browser</title>
+<meta name="description" content="Upload your applicant export and get the NYC Local Law 144 bias-audit tables, the EEOC four-fifths check and charts. Runs entirely in your browser; your file is never uploaded.">
+<meta name="referrer" content="no-referrer">
+<style>
+:root{color-scheme:light dark;
+  --paper:#f9f9f7;--panel:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;--ink-3:#898781;--rule:#e1e0d9;
+  --accent:#2a78d6;--accent-deep:#1c5cab;--on-accent:#fff;--alert:#d03b3b;--alert-bg:rgba(208,59,59,.08);
+  --ok:#0ca30c;--focus:#2a78d6}
+@media (prefers-color-scheme:dark){:root{--paper:#0d0d0d;--panel:#1a1a19;--ink:#fff;--ink-2:#c3c2b7;
+  --ink-3:#898781;--rule:#2c2c2a;--accent:#3987e5;--accent-deep:#6da7ec;--alert-bg:rgba(208,59,59,.18)}}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--accent-deep)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;padding:0 20px}
+.wide{max-width:940px}
+header.top{display:flex;justify-content:space-between;align-items:baseline;padding:22px 0 0}
+.brand{font-weight:600;letter-spacing:-.01em}
+.brand small{color:var(--ink-2);font-weight:400;margin-left:8px}
+header.top a{color:var(--ink-2);text-decoration:none}
+header.top a:hover{text-decoration:underline}
+.hero{padding:56px 0 28px}
+h1{font-size:clamp(30px,5vw,42px);line-height:1.12;letter-spacing:-.02em;margin:0 0 18px;font-weight:650;max-width:14em}
+h1 .quiet{display:block;color:var(--ink-2);font-weight:500;font-size:.62em;letter-spacing:0;margin-top:14px;line-height:1.3}
+.lede{font-size:17px;color:var(--ink-2);margin:0 0 26px;max-width:38em}
+.engine{display:flex;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--rule);
+  border-radius:8px;background:var(--panel);font-size:14px;color:var(--ink-2)}
+.engine .bar{position:relative;flex:0 0 120px;height:4px;border-radius:2px;background:var(--rule);overflow:hidden}
+.engine .bar::after{content:"";position:absolute;inset:0;width:40%;background:var(--accent);border-radius:2px;
+  animation:slide 1.4s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(350%)}}
+@media (prefers-reduced-motion:reduce){.engine .bar::after{animation:none;width:100%;opacity:.5}}
+.engine.ready .bar{display:none}
+.engine.ready{color:var(--ink)}
+.engine .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none;display:none}
+.engine.ready .dot{display:block}
+section.step{padding:30px 0;border-top:1px solid var(--rule)}
+section.step[hidden]{display:none}
+h2{font-size:20px;margin:0 0 16px;display:flex;align-items:center;gap:12px;letter-spacing:-.01em}
+h2 .num{flex:none;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--ink);
+  display:inline-grid;place-items:center;font-size:13px;font-weight:600}
+section.done h2 .num{background:var(--ink);color:var(--paper)}
+.drop{border:1.5px dashed var(--ink-3);border-radius:12px;padding:40px 24px;text-align:center;background:var(--panel);
+  cursor:pointer;transition:border-color .15s,background .15s}
+.drop.over,.drop:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
+.drop p{margin:0}
+.drop .hint{color:var(--ink-2);font-size:14px;margin-top:8px}
+.drop:disabled,.drop[aria-disabled="true"]{opacity:.55;cursor:progress}
+button.link{background:none;border:0;padding:0;color:var(--accent-deep);text-decoration:underline;cursor:pointer}
+.alt{color:var(--ink-2);font-size:14px;margin:12px 0 0}
+.fileinfo{margin-top:14px;font-size:14px;color:var(--ink-2)}
+.fileinfo strong{color:var(--ink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+label.field{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--ink-2)}
+label.field select,label.field input{padding:9px 10px;border:1px solid var(--rule);border-radius:7px;background:var(--panel);
+  color:var(--ink);min-width:0;width:100%}
+label.field .opt{color:var(--ink-3);margin-left:6px}
+label.field .guess{color:var(--ink-3);font-size:12px}
+fieldset{border:0;padding:0;margin:0;grid-column:1/-1}
+fieldset legend{font-size:14px;color:var(--ink-2);padding:0;margin-bottom:6px}
+.radios{display:flex;gap:18px;flex-wrap:wrap}
+.radios label{display:flex;gap:8px;align-items:center}
+details.more{margin-top:18px;border:1px solid var(--rule);border-radius:8px;padding:10px 14px;background:var(--panel)}
+details.more summary{cursor:pointer;color:var(--ink-2);font-size:14px}
+details.more .grid{margin-top:12px}
+label.check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px}
+label.check input{margin-top:3px}
+.actions{margin-top:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+button.primary,a.primary{background:var(--ink);color:var(--paper);border:0;border-radius:8px;padding:11px 18px;
+  font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+button.primary:disabled{opacity:.5;cursor:progress}
+button.ghost,a.ghost{background:var(--panel);color:var(--ink);border:1px solid var(--rule);border-radius:8px;
+  padding:10px 14px;cursor:pointer;text-decoration:none;display:inline-block}
+.error{margin-top:16px;padding:12px 14px;border-left:3px solid var(--alert);background:var(--alert-bg);border-radius:0 8px 8px 0}
+.error[hidden]{display:none}
+.error strong{display:block;margin-bottom:2px}
+.report-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.downloads{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.note{color:var(--ink-2);font-size:14px}
+#report{margin:0 -20px}
+#report .aedt-report{padding-top:4px;padding-bottom:8px}
+footer{border-top:1px solid var(--rule);margin-top:40px;padding:22px 0 40px;color:var(--ink-2);font-size:13px}
+footer p{margin:0 0 6px;max-width:60em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">aedt-audit <small>bias audit, in the browser</small></div>
+    <a href="https://github.com/tobiascanavesi/aedt-audit">Source and documentation</a>
+  </header>
+
+  <section class="hero">
+    <h1>Check a hiring tool for bias.
+      <span class="quiet">Your file stays on this computer.</span></h1>
+    <p class="lede">Open the spreadsheet your applicant-tracking system exports — one row per person,
+      with sex, race/ethnicity and whether they advanced — and get the tables New York City's
+      Local Law 144 asks employers to publish, the federal four-fifths check, and charts.
+      The analysis runs inside this browser tab. Nothing is uploaded, and nothing is kept.</p>
+    <div class="engine" id="engine" aria-live="polite">
+      <span class="bar" aria-hidden="true"></span><span class="dot" aria-hidden="true"></span>
+      <span id="engine-text">Preparing the analysis engine…</span>
+    </div>
+  </section>
+
+  <section class="step" id="step-file">
+    <h2><span class="num">1</span>Your data</h2>
+    <div class="drop" id="drop" role="button" tabindex="0" aria-describedby="drop-hint">
+      <p><strong>Drop a .csv or .xlsx file here</strong>, or <button class="link" id="pick" type="button">choose a file</button>.</p>
+      <p class="hint" id="drop-hint">One row per person. Columns for sex, race/ethnicity, and either a yes/no decision
+        or a score. Names are not needed and are best left out.</p>
+      <input type="file" id="file" accept=".csv,.xlsx,.xlsm,text/csv" class="sr" tabindex="-1">
+    </div>
+    <p class="alt">No file handy? <button class="link" id="sample" type="button">Try it with sample data</button>
+      — 5,000 made-up applicants with a bias we planted on purpose, so you can see what a finding looks like.</p>
+    <p class="fileinfo" id="fileinfo" hidden></p>
+  </section>
+
+  <section class="step" id="step-columns" hidden>
+    <h2><span class="num">2</span>Which column is which</h2>
+    <p class="note" style="margin:-6px 0 16px">We guessed from the column names. Check each one.</p>
+    <div class="grid">
+      <label class="field">Sex<select id="col-sex"></select><span class="guess" id="g-sex"></span></label>
+      <label class="field">Race / ethnicity<select id="col-race"></select><span class="guess" id="g-race"></span></label>
+      <fieldset>
+        <legend>What the tool recorded for each person</legend>
+        <div class="radios">
+          <label><input type="radio" name="kind" value="outcome" checked> A yes/no decision (selected, advanced, hired)</label>
+          <label><input type="radio" name="kind" value="score"> A score</label>
+        </div>
+      </fieldset>
+      <label class="field" id="f-outcome">Decision column<select id="col-outcome"></select><span class="guess" id="g-outcome"></span></label>
+      <label class="field" id="f-score" hidden>Score column<select id="col-score"></select><span class="guess" id="g-score"></span></label>
+      <label class="field"><span>Audit period<span class="opt">optional</span></span>
+        <select id="col-period"><option value="">One audit — no period column</option></select>
+        <span class="guess">Pick a year or quarter column to track the tool over time instead.</span></label>
+    </div>
+    <details class="more">
+      <summary>Details printed on the report (optional)</summary>
+      <div class="grid">
+        <label class="field">Tool name<input id="m-tool" placeholder="resume-screener"></label>
+        <label class="field">Tool version<input id="m-version" placeholder="2.3.1"></label>
+        <label class="field">Data from<input id="m-start" placeholder="2025-01-01"></label>
+        <label class="field">Data to<input id="m-end" placeholder="2025-12-31"></label>
+        <label class="field">Prepared by<input id="m-by"></label>
+        <label class="field">Notes<input id="m-notes"></label>
+      </div>
+    </details>
+    <label class="check"><input type="checkbox" id="opt-sig" checked>
+      Add the statistical test: is each gap larger than chance would produce?</label>
+    <label class="check" id="f-drop" hidden><input type="checkbox" id="opt-drop">
+      Leave out the <strong id="missing-n">0</strong> rows that have no recorded decision
+      (people still in process, for example). The report will say how many were left out.</label>
+    <div class="actions">
+      <button class="primary" id="run" type="button">Run the audit</button>
+      <span class="note" id="run-note"></span>
+    </div>
+    <div class="error" id="error" hidden role="alert"></div>
+  </section>
+</div>
+
+<div class="wrap wide">
+  <section class="step" id="step-report" hidden>
+    <div class="report-bar">
+      <h2><span class="num">3</span>Your report</h2>
+      <div class="downloads">
+        <a class="primary" id="dl-html" download="bias_audit.html">Download the report</a>
+        <button class="ghost" id="print" type="button">Print or save as PDF</button>
+        <a class="ghost" id="dl-json" download="bias_audit.json">JSON</a>
+        <a class="ghost" id="dl-md" download="bias_audit.md">Markdown</a>
+        <span id="dl-csvs"></span>
+        <button class="link" id="again" type="button">Start over</button>
+      </div>
+    </div>
+    <p class="note" id="report-note" hidden></p>
+    <div id="report"></div>
+  </section>
+</div>
+
+<div class="wrap">
+  <footer>
+    <p>Computes the metrics defined by NYC Local Law 144 (6 RCNY § 5-300 et seq.) and the EEOC Uniform
+      Guidelines (29 CFR § 1607.4(D)). This page is tooling, not legal advice, and not an independent
+      bias audit — under Local Law 144 the audit itself must be conducted by an independent auditor.</p>
+    <p>Runs the <a href="https://pypi.org/project/aedt-audit/">aedt-audit</a> Python package
+      <span id="ver"></span> inside your browser with <a href="https://pyodide.org">Pyodide</a>.
+      The only network requests are for that code, from jsDelivr and PyPI. No analytics, no cookies.</p>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const PY_SETUP = String.raw`
+import io, json
+import pandas as pd
+from aedt_audit import AuditMetadata, audit_lifecycle, ll144_summary, synthetic_applicants
+
+_df = None
+
+def _read_csv(path):
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except UnicodeDecodeError:
+            continue
+    return pd.read_csv(path, encoding="latin-1")
+
+def load_file(path, name):
+    global _df
+    low = name.lower()
+    if low.endswith((".xlsx", ".xlsm", ".xls")):
+        _df = pd.read_excel(path)
+    else:
+        _df = _read_csv(path)
+    _df.columns = [str(c) for c in _df.columns]
+    return describe()
+
+def load_sample():
+    global _df
+    _df = synthetic_applicants(5000, seed=0, score_bias={("sex", "female"): -8.0})
+    return describe()
+
+def describe():
+    cols = []
+    for c in _df.columns:
+        s = _df[c]
+        cols.append({
+            "name": c,
+            "dtype": str(s.dtype),
+            "missing": int(s.isna().sum()),
+            "unique": int(s.nunique(dropna=True)),
+            "sample": [str(v) for v in s.dropna().unique()[:4]],
+        })
+    return json.dumps({"rows": int(len(_df)), "columns": cols})
+
+def missing_count(col):
+    return int(_df[col].isna().sum())
+
+def run(opts_json):
+    opts = json.loads(opts_json)
+    df = _df
+    value_col = opts["outcome"] if opts["kind"] == "outcome" else opts["score"]
+    dropped = 0
+    if opts.get("drop_missing"):
+        keep = df[value_col].notna()
+        dropped = int((~keep).sum())
+        df = df[keep]
+    kw = {opts["kind"]: value_col}
+    meta = AuditMetadata(**{k: v for k, v in opts.get("metadata", {}).items() if v})
+    if dropped:
+        what = "decision" if opts["kind"] == "outcome" else "score"
+        note = f"{dropped} row(s) with no recorded {what} were left out of this analysis."
+        meta.notes = (meta.notes + " " if meta.notes else "") + note
+    out = {"dropped": dropped}
+    period = opts.get("period")
+    if period:
+        has_period = df[period].notna()
+        out["no_period"] = int((~has_period).sum())
+        df = df[has_period]
+        labels = list(dict.fromkeys(str(v) for v in df[period]))
+        periods = {lab: df[df[period].astype(str) == lab].drop(columns=[period]) for lab in labels}
+        report = audit_lifecycle(
+            periods, sex=opts["sex"], race=opts["race"], metadata=meta, **kw
+        )
+        out["kind"] = "lifecycle"
+        out["fragment"] = report.to_html(fragment=True)
+        out["html"] = report.to_html()
+        out["json"] = report.to_json()
+        out["markdown"] = report.to_markdown()
+        tidy = report.to_dataframe()
+        out["csvs"] = {
+            f"lifecycle_{report.kind}_{g}.csv": tidy[tidy["grouping"] == g].to_csv(index=False)
+            for g in report.series
+        }
+        out["flagged"] = int(tidy["review"].sum())
+    else:
+        summary = ll144_summary(
+            df, sex=opts["sex"], race=opts["race"], metadata=meta,
+            significance=bool(opts.get("significance")), **kw
+        )
+        from aedt_audit import benchmark_mask
+        out["kind"] = "summary"
+        out["fragment"] = summary.to_html(fragment=True)
+        out["html"] = summary.to_html()
+        out["json"] = summary.to_json()
+        out["markdown"] = summary.to_markdown()
+        out["csvs"] = {
+            f"ll144_{summary.kind}_{name}.csv": t.to_csv(index=False)
+            for name, t in summary.tables.items()
+        }
+        out["flagged"] = int(sum(
+            (benchmark_mask(t) & t["adverse_impact_eeoc"].astype(bool)).sum()
+            for t in summary.tables.values()
+        ))
+    return json.dumps(out)
+`;
+
+let pyodide = null, ready = false, columns = [], fileName = "";
+
+function engine(text, isReady) {
+  $("engine-text").textContent = text;
+  $("engine").classList.toggle("ready", !!isReady);
+}
+
+async function boot() {
+  try {
+    engine("Downloading the analysis engine — about 30 MB, one time; your browser keeps a copy…");
+    pyodide = await loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/" });
+    engine("Loading the data library…");
+    await pyodide.loadPackage(["pandas", "micropip"]);
+    engine("Installing aedt-audit…");
+    const micropip = pyodide.pyimport("micropip");
+    let installed = false;
+    try {
+      const r = await fetch("./wheel.json", { cache: "no-store" });
+      if (r.ok) {
+        const m = await r.json();
+        await micropip.install([new URL(m.wheel, location.href).href, "tabulate"]);
+        installed = true;
+      }
+    } catch (e) { /* no local wheel: fall back to PyPI */ }
+    if (!installed) await micropip.install(["aedt-audit", "tabulate"]);
+    pyodide.runPython(PY_SETUP);
+    const version = pyodide.runPython("import aedt_audit; aedt_audit.__version__");
+    $("ver").textContent = "v" + version;
+    ready = true;
+    engine("Ready. Everything from here on runs on this computer.", true);
+    if (pendingAction) { const a = pendingAction; pendingAction = null; a(); }
+  } catch (e) {
+    console.error(e);
+    engine("The analysis engine could not be loaded. Check your internet connection and reload the page. (" + (e && e.message ? e.message.split("\n")[0] : e) + ")");
+  }
+}
+let pendingAction = null;
+
+// ---------- step 1: data ----------
+const drop = $("drop"), fileInput = $("file");
+$("pick").addEventListener("click", (ev) => { ev.stopPropagation(); fileInput.click(); });
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); fileInput.click(); } });
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (ev) => { ev.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (ev) => { const f = ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) useFile(f); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) useFile(fileInput.files[0]); fileInput.value = ""; });
+$("sample").addEventListener("click", () => whenReady(loadSample));
+
+function whenReady(fn) {
+  if (ready) return fn();
+  pendingAction = fn;
+  $("fileinfo").hidden = false;
+  $("fileinfo").textContent = "Waiting for the analysis engine to finish loading…";
+}
+
+async function useFile(file) {
+  fileName = file.name;
+  whenReady(async () => {
+    try {
+      $("fileinfo").hidden = false;
+      $("fileinfo").textContent = "Reading " + file.name + "…";
+      const low = file.name.toLowerCase();
+      if (low.endsWith(".xlsx") || low.endsWith(".xlsm") || low.endsWith(".xls")) {
+        engine("Adding spreadsheet support (one time)…");
+        await pyodide.pyimport("micropip").install("openpyxl");
+        engine("Ready. Everything from here on runs on this computer.", true);
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      pyodide.FS.writeFile("/upload.bin", bytes);
+      const info = JSON.parse(pyodide.globals.get("load_file")("/upload.bin", file.name));
+      afterLoad(info, file.name);
+    } catch (e) { showLoadError(e); }
+  });
+}
+
+function loadSample() {
+  try {
+    fileName = "sample_applicants.csv";
+    const info = JSON.parse(pyodide.globals.get("load_sample")());
+    afterLoad(info, "sample data (synthetic, 5,000 applicants, bias planted against one group)");
+  } catch (e) { showLoadError(e); }
+}
+
+function showLoadError(e) {
+  $("fileinfo").hidden = false;
+  $("fileinfo").innerHTML = "<strong>That file could not be read.</strong> " + escapeHtml(pyMessage(e)) +
+    " Save it as .csv or .xlsx with one header row and try again.";
+}
+
+function afterLoad(info, label) {
+  columns = info.columns;
+  $("fileinfo").hidden = false;
+  $("fileinfo").innerHTML = "<strong>" + escapeHtml(label) + "</strong> — " + info.rows.toLocaleString() +
+    " rows, " + columns.length + " columns.";
+  fillSelects();
+  $("step-file").classList.add("done");
+  $("step-columns").hidden = false;
+  $("step-report").hidden = true;
+  $("error").hidden = true;
+  $("f-drop").hidden = true; $("opt-drop").checked = false;
+  $("step-columns").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// ---------- step 2: columns ----------
+const GUESS = {
+  sex: [/^sex$/i, /gender/i, /\bsex\b/i],
+  race: [/race/i, /ethnic/i],
+  outcome: [/^selected$/i, /select/i, /advanc/i, /hired?$/i, /outcome/i, /decision/i, /shortlist/i, /pass/i, /interview/i, /status/i],
+  score: [/score/i, /rating/i, /rank/i, /probab/i],
+  period: [/period/i, /^year$/i, /quarter/i, /cohort/i, /audit/i, /\byear\b/i, /month/i],
+};
+function guess(kind, exclude) {
+  for (const re of GUESS[kind]) {
+    const hit = columns.find((c) => re.test(c.name) && !exclude.includes(c.name));
+    if (hit) return hit.name;
+  }
+  return "";
+}
+function option(c) {
+  const o = document.createElement("option");
+  o.value = c.name;
+  const sample = c.sample.length ? " (" + c.sample.join(", ") + (c.unique > c.sample.length ? ", …" : "") + ")" : "";
+  o.textContent = c.name + sample;
+  return o;
+}
+function fillSelects() {
+  const taken = [];
+  for (const kind of ["sex", "race", "outcome", "score", "period"]) {
+    const sel = $("col-" + kind);
+    sel.innerHTML = "";
+    if (kind === "period") { const o = document.createElement("option"); o.value = ""; o.textContent = "One audit — no period column"; sel.appendChild(o); }
+    columns.forEach((c) => sel.appendChild(option(c)));
+    const g = guess(kind, taken);
+    sel.value = g;
+    if (g) taken.push(g);
+    const gl = $("g-" + kind);
+    if (gl) gl.textContent = g ? "Our guess — change it if it is wrong." : "Choose the column.";
+  }
+  const sc = $("col-score"), oc = $("col-outcome");
+  const kind = sc.value && !oc.value ? "score" : "outcome";
+  document.querySelector('input[name="kind"][value="' + kind + '"]').checked = true;
+  toggleKind();
+}
+function toggleKind() {
+  const kind = document.querySelector('input[name="kind"]:checked').value;
+  $("f-outcome").hidden = kind !== "outcome";
+  $("f-score").hidden = kind !== "score";
+  $("f-drop").hidden = true;
+}
+document.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener("change", toggleKind));
+
+$("run").addEventListener("click", runAudit);
+
+function options() {
+  const kind = document.querySelector('input[name="kind"]:checked').value;
+  return {
+    kind,
+    sex: $("col-sex").value,
+    race: $("col-race").value,
+    outcome: $("col-outcome").value,
+    score: $("col-score").value,
+    period: $("col-period").value,
+    significance: $("opt-sig").checked,
+    drop_missing: !$("f-drop").hidden && $("opt-drop").checked,
+    metadata: {
+      tool_name: $("m-tool").value.trim(), tool_version: $("m-version").value.trim(),
+      data_start: $("m-start").value.trim(), data_end: $("m-end").value.trim(),
+      prepared_by: $("m-by").value.trim(), notes: $("m-notes").value.trim(),
+    },
+  };
+}
+
+async function runAudit() {
+  const opts = options();
+  const err = $("error"); err.hidden = true; err.innerHTML = "";
+  const valueCol = opts.kind === "outcome" ? opts.outcome : opts.score;
+  const problems = [];
+  if (!opts.sex) problems.push("the sex column");
+  if (!opts.race) problems.push("the race/ethnicity column");
+  if (!valueCol) problems.push(opts.kind === "outcome" ? "the decision column" : "the score column");
+  const chosen = [opts.sex, opts.race, valueCol, opts.period].filter(Boolean);
+  if (new Set(chosen).size !== chosen.length) problems.push("different columns for each role (one column is used twice)");
+  if (problems.length) { showError("Before running, choose " + problems.join(", ") + ".", ""); return; }
+
+  $("run").disabled = true; $("run-note").textContent = "Computing…";
+  await new Promise((r) => setTimeout(r, 30));
+  try {
+    const out = JSON.parse(pyodide.globals.get("run")(JSON.stringify(opts)));
+    showReport(out, opts);
+  } catch (e) {
+    const msg = pyMessage(e);
+    if (/missing value/i.test(msg)) {
+      const n = pyodide.globals.get("missing_count")(valueCol);
+      $("missing-n").textContent = n.toLocaleString();
+      $("f-drop").hidden = false;
+      showError("Some rows have no recorded " + (opts.kind === "outcome" ? "decision" : "score") + ".",
+        msg + " Tick the box above to leave those rows out, or fix the file and load it again.");
+    } else {
+      showError("The audit could not be computed.", msg);
+    }
+  } finally {
+    $("run").disabled = false; $("run-note").textContent = "";
+  }
+}
+
+function showError(title, detail) {
+  const err = $("error");
+  err.innerHTML = "<strong>" + escapeHtml(title) + "</strong>" + (detail ? escapeHtml(detail) : "");
+  err.hidden = false;
+  err.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// ---------- step 3: report ----------
+const urls = [];
+let lastHtml = "";
+function blobUrl(text, type) {
+  const u = URL.createObjectURL(new Blob([text], { type }));
+  urls.push(u);
+  return u;
+}
+function showReport(out, opts) {
+  lastHtml = out.html;
+  urls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  const base = (opts.metadata.tool_name || fileName.replace(/\.[^.]+$/, "") || "bias_audit").replace(/[^\w.-]+/g, "_");
+  const stem = base + (out.kind === "lifecycle" ? "_lifecycle" : "") + "_audit";
+  $("dl-html").href = blobUrl(out.html, "text/html;charset=utf-8"); $("dl-html").download = stem + ".html";
+  $("dl-json").href = blobUrl(out.json, "application/json"); $("dl-json").download = stem + ".json";
+  $("dl-md").href = blobUrl(out.markdown, "text/markdown;charset=utf-8"); $("dl-md").download = stem + ".md";
+  const csvs = $("dl-csvs"); csvs.innerHTML = "";
+  for (const [name, text] of Object.entries(out.csvs)) {
+    const a = document.createElement("a");
+    a.className = "ghost"; a.href = blobUrl(text, "text/csv;charset=utf-8"); a.download = name;
+    a.textContent = "CSV: " + name.replace(/^(ll144|lifecycle)_(selection|scoring)_/, "").replace(/\.csv$/, "").replace("_", "/");
+    csvs.appendChild(a);
+  }
+  const notes = [];
+  if (out.dropped) notes.push(out.dropped.toLocaleString() + " rows with no recorded " + (opts.kind === "outcome" ? "decision" : "score") + " were left out, and the report says so.");
+  if (out.no_period) notes.push(out.no_period.toLocaleString() + " rows with no audit period were left out.");
+  notes.push(out.kind === "lifecycle"
+    ? (out.flagged ? out.flagged + " grouping-period(s) are flagged for review." : "No period is flagged for review.")
+    : (out.flagged ? out.flagged + " benchmarked categor" + (out.flagged === 1 ? "y falls" : "ies fall") + " below the four-fifths line." : "No benchmarked category falls below the four-fifths line."));
+  $("report-note").textContent = notes.join(" ");
+  $("report-note").hidden = false;
+  $("report").innerHTML = out.fragment;
+  $("step-columns").classList.add("done");
+  $("step-report").hidden = false;
+  $("step-report").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+$("print").addEventListener("click", () => {
+  if (!lastHtml) return;
+  const w = window.open("", "_blank");
+  if (!w) { window.print(); return; }
+  w.document.open(); w.document.write(lastHtml); w.document.close();
+  setTimeout(() => { try { w.focus(); w.print(); } catch (e) { /* user closed it */ } }, 300);
+});
+$("again").addEventListener("click", () => {
+  $("step-report").hidden = true; $("step-columns").hidden = true;
+  $("step-file").classList.remove("done"); $("step-columns").classList.remove("done");
+  $("fileinfo").hidden = true; $("report").innerHTML = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+// ---------- helpers ----------
+function pyMessage(e) {
+  const text = (e && e.message) ? e.message : String(e);
+  const lines = text.trim().split("\n").filter(Boolean);
+  let last = lines[lines.length - 1] || text;
+  last = last.replace(/^[A-Za-z_.]*(Error|Exception):\s*/, "");
+  return last;
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+boot();
+</script>
+</body>
+</html>

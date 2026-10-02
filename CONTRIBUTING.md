@@ -23,6 +23,21 @@ pip install -e ".[dev]"
 ruff check src tests && pytest
 ```
 
+## The web app
+
+`web/index.html` runs the package in the browser with Pyodide; GitHub Pages
+publishes it together with a wheel built from `main` (`.github/workflows/pages.yml`).
+To test it locally against your working copy:
+
+```bash
+python -m build --wheel --outdir dist
+cp dist/*.whl web/ && printf '{"wheel": "%s"}' "$(basename dist/*.whl)" > web/wheel.json
+python -m http.server 8788 -d web      # then open http://127.0.0.1:8788/
+```
+
+The wheel and `wheel.json` are git-ignored. Without them the page installs the
+published release from PyPI instead.
+
 ## Pull requests
 
 - One logical change per PR, with a clear description of the *legal basis* for
