@@ -31,6 +31,7 @@ want bias checks in CI before a tool ever reaches production.
   - [2. Run the audit](#2-run-the-audit)
   - [3. The output](#3-the-output)
   - [4. How to read the tables](#4-how-to-read-the-tables)
+  - [5. Is the gap noise? Statistical significance](#5-is-the-gap-noise-statistical-significance)
 - [Scoring tools (continuous scores)](#scoring-tools-continuous-scores)
 - [Monitoring over time (lifecycle audits)](#monitoring-over-time-lifecycle-audits)
 - [What it computes](#what-it-computes)
@@ -164,6 +165,50 @@ for specific intersections — which is exactly why LL144 mandates this table.
 The audit correctly recovered the ground truth we injected: bias against
 women, surfacing in the sex table and compounding intersectionally.
 
+### 5. Is the gap noise? Statistical significance
+
+The four-fifths rule is a rule of thumb. The same federal guideline says smaller
+differences can still be adverse impact when they are "significant in both
+statistical and practical terms", and larger ones may not be when they rest on
+small numbers (29 CFR § 1607.4(D)). Pass `significance=True` to add the
+**standard-deviation analysis** courts and agencies use for that question
+(*Castaneda v. Partida*, 430 U.S. 482 (1977); *Hazelwood School District v.
+United States*, 433 U.S. 299 (1977)):
+
+```python
+summary = ll144_summary(applicants, outcome="selected", significance=True)
+```
+
+Each category is compared with the benchmark group its impact ratio is already
+measured against. The **sex** table on the demo data, with the new columns:
+
+| sex     |    n |   selected |   rate |   impact_ratio | adverse_impact_eeoc   |   z_score | p_value   | significant_2sd   | small_sample   |   selections_to_four_fifths |
+|:--------|-----:|-----------:|-------:|---------------:|:----------------------|----------:|:----------|:------------------|:---------------|----------------------------:|
+| female  | 2441 |        510 |   0.21 |          0.544 | True                  |    -13.35 | <0.001    | True              | False          |                         240 |
+| male    | 2409 |        925 |   0.38 |          1     | False                 |      0    | 1.000     | False             | False          |                           0 |
+| unknown |  150 |         65 |   0.43 |          1.129 | False                 |      1.2  | 0.228     | False             | False          |                           0 |
+
+- **`z_score`** — how many standard deviations the category's rate sits from the
+  benchmark's; negative means lower. Beyond about −2 the gap is unlikely to be
+  chance. Women here: -13.4 standard deviations below men.
+- **`p_value`** — the probability of a gap at least this large if selection were
+  in fact equal (two-sided).
+- **`significant_2sd`** — the category is two or more standard deviations *below*
+  the benchmark.
+- **`small_sample`** — fewer than 30 people in the two groups compared. The
+  approximation is unreliable there, which is also when the four-fifths rule
+  itself is most fragile.
+- **`selections_to_four_fifths`** — the gap in people: how many more selections
+  would have put the category on the four-fifths line. Here, 240 more women.
+
+Read the two flags together. `adverse_impact_eeoc` is the rule enforcement
+agencies "normally will use"; the statistics say how much weight it can bear
+(Uniform Guidelines Questions & Answers 18, 20–22, 24). A flag with a
+non-significant z on 18 people is a reason to gather more data; no flag but
+z = −4.5 on 2,000 people is a reason to look closer. Neither overrides the other,
+and the significance columns never change `adverse_impact_eeoc`. The arithmetic
+is pure Python — no scipy.
+
 ## Scoring tools (continuous scores)
 
 If your tool outputs a score instead of a yes/no, pass `score=` instead of
@@ -245,6 +290,8 @@ expert-labelled data this toolkit deliberately does not touch.
 | Small-category (<2%) exclusion, flagged and disclosed — never silently dropped | DCWP rules |
 | `unknown` demographic reporting (disclosed, not benchmarked) | DCWP rules |
 | Four-fifths adverse-impact flag (labeled as EEOC, since LL144 sets no threshold) | 29 CFR § 1607.4(D) |
+| Standard-deviation (z) test of each category vs. the benchmark, two-sided p-value, small-sample flag | 29 CFR § 1607.4(D); *Castaneda v. Partida* (1977); *Hazelwood* (1977); UGESP Q&A 18–24 |
+| Selections needed to reach the four-fifths line (the gap in people) | Arithmetic on the LL144 rates and the EEOC 0.8 |
 | Boundary margin (worst impact ratio − 0.8) across audit periods | Ferrario 2026 methodology, grounded on EEOC 0.8 |
 | Profile drift (change in the impact-ratio vector between periods) | Ferrario 2026 methodology / NIST AI RMF *Measure/Manage* |
 | Score-traceability record schema (JSON Schema, per-decision provenance) | NIST AI RMF *Measure/Manage* practice |
