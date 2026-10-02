@@ -28,6 +28,13 @@ All notable changes to this project are documented here. The format follows
   ratio of 0.796 is no longer displayed as `0.80` beside an adverse-impact flag.
 
 ### Added
+- **A no-code web app for HR teams** (`web/index.html`, published to GitHub
+  Pages): drop in a `.csv`/`.xlsx` export, confirm which column is which, run
+  the audit, and download the report, JSON, Markdown or CSVs. It runs this
+  package in the browser with Pyodide, so the file never leaves the user's
+  computer. Handles yes/no text decisions, rows with no recorded decision (opt-in
+  exclusion, disclosed in the report), scores, and a period column for the
+  lifecycle view.
 - `to_html()` on both reports now returns a **complete, self-contained HTML
   document** — inline CSS, inline SVG charts, no JavaScript, no external
   assets — with an at-a-glance strip, a plain-language "how to read this"

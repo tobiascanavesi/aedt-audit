@@ -14,3 +14,6 @@ audit_out/
 .idea/
 .vscode/
 papers/
+web/*.whl
+web/wheel.json
+site/

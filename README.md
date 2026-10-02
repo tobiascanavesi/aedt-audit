@@ -23,8 +23,19 @@ want bias checks in CI before a tool ever reaches production.
 - The **NIST AI Risk Management Framework** expects measurable, documented
   evaluation of AI systems used for consequential decisions.
 
+## No coding? Use the web app
+
+Open **[tobiascanavesi.github.io/aedt-audit](https://tobiascanavesi.github.io/aedt-audit/)**,
+drop in your applicant export (`.csv` or `.xlsx`), confirm which column is which,
+and download the report with charts. It runs this same Python package *inside your
+browser*: **your file never leaves your computer**, nothing is uploaded, and there
+are no analytics. The first visit downloads the analysis engine (about 30 MB);
+after that your browser keeps a copy. You can also save the page
+([`web/index.html`](web/index.html)) and open it locally.
+
 ## Contents
 
+- [No coding? Use the web app](#no-coding-use-the-web-app)
 - [Installation](#installation)
 - [A complete example](#a-complete-example)
   - [1. The input: what your data must look like](#1-the-input-what-your-data-must-look-like)
