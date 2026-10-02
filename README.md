@@ -57,7 +57,7 @@ applicant-tracking systems can export this directly:
 |---|---|---|
 | `sex` | text | self-reported sex category; missing values are reported as `unknown` |
 | `race_ethnicity` | text | self-reported race/ethnicity (EEO-1 categories work well) |
-| `selected` | bool / 0-1 | did this person advance (interview, shortlist, hire)? |
+| `selected` | bool, 0/1, or yes/no text | did this person advance (interview, shortlist, hire)? Rows with no recorded outcome are rejected — resolve them first |
 
 ```text
       sex             race_ethnicity  selected
@@ -106,21 +106,21 @@ combination LL144 requires. Here are the first two on the demo data:
 
 | sex     |    n |   selected |   rate |   share | excluded   |   impact_ratio | adverse_impact_eeoc   |
 |:--------|-----:|-----------:|-------:|--------:|:-----------|---------------:|:----------------------|
-| female  | 2441 |        510 |   0.21 |    0.49 | False      |           0.54 | True                  |
-| male    | 2409 |        925 |   0.38 |    0.48 | False      |           1    | False                 |
-| unknown |  150 |         65 |   0.43 |    0.03 | False      |           1.13 | False                 |
+| female  | 2441 |        510 |   0.21 |    0.49 | False      |          0.544 | True                  |
+| male    | 2409 |        925 |   0.38 |    0.48 | False      |          1     | False                 |
+| unknown |  150 |         65 |   0.43 |    0.03 | False      |          1.129 | False                 |
 
 **race/ethnicity**
 
 | race_ethnicity                      |    n |   selected |   rate |   share | excluded   |   impact_ratio | adverse_impact_eeoc   |
 |:------------------------------------|-----:|-----------:|-------:|--------:|:-----------|---------------:|:----------------------|
-| American Indian or Alaska Native    |  154 |         43 |   0.28 |    0.03 | False      |           0.74 | True                  |
-| Asian                               |  600 |        188 |   0.31 |    0.12 | False      |           0.83 | False                 |
-| Black or African American           |  681 |        195 |   0.29 |    0.14 | False      |           0.76 | True                  |
-| Hispanic or Latino                  |  933 |        272 |   0.29 |    0.19 | False      |           0.77 | True                  |
-| Native Hawaiian or Pacific Islander |   95 |         28 |   0.29 |    0.02 | True       |           0.78 | True                  |
-| Two or More Races                   |  244 |         92 |   0.38 |    0.05 | False      |           1    | False                 |
-| White                               | 2293 |        682 |   0.3  |    0.46 | False      |           0.79 | True                  |
+| American Indian or Alaska Native    |  154 |         43 |   0.28 |    0.03 | False      |          0.741 | True                  |
+| Asian                               |  600 |        188 |   0.31 |    0.12 | False      |          0.831 | False                 |
+| Black or African American           |  681 |        195 |   0.29 |    0.14 | False      |          0.759 | True                  |
+| Hispanic or Latino                  |  933 |        272 |   0.29 |    0.19 | False      |          0.773 | True                  |
+| Native Hawaiian or Pacific Islander |   95 |         28 |   0.29 |    0.02 | True       |          0.782 | True                  |
+| Two or More Races                   |  244 |         92 |   0.38 |    0.05 | False      |          1     | False                 |
+| White                               | 2293 |        682 |   0.3  |    0.46 | False      |          0.789 | True                  |
 
 ### 4. How to read the tables
 
@@ -130,7 +130,9 @@ Walk the columns left to right:
   selection rate of 21%. This is the raw fact the rest is built on.
 - **`impact_ratio`** — each rate divided by the **highest-rate comparison
   group** (here: men at 38%, whose ratio is therefore 1.0). Women's ratio is
-  0.21 / 0.38 ≈ **0.54**: women advance at 54% the rate of men. LL144 requires
+  0.21 / 0.38 ≈ **0.544**: women advance at 54% the rate of men. Ratios are
+  shown with three decimals so a value such as 0.796 is never displayed as
+  0.80 beside a flag that says it is below 0.8. LL144 requires
   this number to be computed and published; it does not set a pass/fail line.
 - **`adverse_impact_eeoc`** — `True` whenever the impact ratio falls below
   **0.8**, the federal four-fifths rule. This is the column to scan first.
@@ -152,9 +154,9 @@ category alone:
 
 | sex    | race_ethnicity            |    n |   rate |   impact_ratio | adverse_impact_eeoc   |
 |:-------|:--------------------------|-----:|-------:|---------------:|:----------------------|
-| female | Hispanic or Latino        |  478 |   0.19 |           0.40 | True                  |
-| female | White                     | 1109 |   0.20 |           0.42 | True                  |
-| female | Black or African American |  335 |   0.21 |           0.43 | True                  |
+| female | Hispanic or Latino        |  478 |   0.19 |          0.402 | True                  |
+| female | White                     | 1109 |   0.20 |          0.420 | True                  |
+| female | Black or African American |  335 |   0.21 |          0.431 | True                  |
 
 A tool can look acceptable by sex and by race separately and still fail badly
 for specific intersections — which is exactly why LL144 mandates this table.

@@ -93,3 +93,63 @@ def test_missing_columns_raise():
         selection_rates(df, by=["nope"], outcome="selected")
     with pytest.raises(KeyError):
         scoring_rates(df, by=["sex"], score="nope")
+
+
+# --- input validation: missing or ambiguous outcomes must never be guessed ---
+
+
+def test_missing_outcome_raises_instead_of_counting_as_selected():
+    # Before: NaN -> astype(bool) -> True, inflating the rate to 1.0.
+    df = pd.DataFrame({"sex": ["m", "m", "f", "f"], "selected": [1.0, np.nan, 0.0, np.nan]})
+    with pytest.raises(ValueError, match="2 missing"):
+        selection_rates(df, by=["sex"], outcome="selected")
+
+
+def test_zero_one_integers_and_floats_are_accepted():
+    df = pd.DataFrame({"sex": ["m", "m", "f", "f"], "selected": [1, 0, 1, 1]})
+    rates = selection_rates(df, by=["sex"], outcome="selected").set_index("sex")
+    assert rates.loc["m", "rate"] == pytest.approx(0.5)
+    assert rates.loc["f", "rate"] == pytest.approx(1.0)
+    df["selected"] = df["selected"].astype(float)
+    assert selection_rates(df, by=["sex"], outcome="selected")["selected"].sum() == 3
+
+
+def test_yes_no_and_true_false_text_outcomes_parse():
+    # Before: any text -> astype(bool) -> True for every row.
+    df = pd.DataFrame(
+        {"sex": ["m", "m", "f", "f"], "selected": ["Yes", "no", " TRUE ", "False"]}
+    )
+    rates = selection_rates(df, by=["sex"], outcome="selected").set_index("sex")
+    assert rates.loc["m", "selected"] == 1
+    assert rates.loc["f", "selected"] == 1
+
+
+def test_unrecognised_outcome_values_raise_and_are_named():
+    df = pd.DataFrame({"sex": ["m", "f", "f"], "selected": ["yes", "maybe", "pending"]})
+    with pytest.raises(ValueError, match="'maybe'.*'pending'"):
+        selection_rates(df, by=["sex"], outcome="selected")
+    df = pd.DataFrame({"sex": ["m", "f"], "selected": [1, 2]})
+    with pytest.raises(ValueError, match="'2'"):
+        selection_rates(df, by=["sex"], outcome="selected")
+
+
+def test_missing_scores_raise_instead_of_deflating_the_rate():
+    # Before: NaN stayed in n but could never be above the median.
+    df = pd.DataFrame({"sex": ["m", "m", "f", "f"], "score": [10.0, 20.0, 30.0, np.nan]})
+    with pytest.raises(ValueError, match="1 missing"):
+        scoring_rates(df, by=["sex"], score="score")
+
+
+def test_non_numeric_scores_raise():
+    df = pd.DataFrame({"sex": ["m", "f"], "score": ["high", "low"]})
+    with pytest.raises(ValueError, match="numeric"):
+        scoring_rates(df, by=["sex"], score="score")
+
+
+def test_empty_data_raises():
+    empty = pd.DataFrame({"sex": pd.Series([], dtype=str), "selected": pd.Series([], dtype=bool)})
+    with pytest.raises(ValueError, match="empty"):
+        selection_rates(empty, by=["sex"], outcome="selected")
+    empty["score"] = pd.Series([], dtype=float)
+    with pytest.raises(ValueError, match="empty"):
+        scoring_rates(empty, by=["sex"], score="score")
