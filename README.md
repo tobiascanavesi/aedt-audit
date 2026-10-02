@@ -12,7 +12,8 @@ candidates, U.S. rules already tell you what you must measure. `aedt-audit`
 computes those artifacts from a plain table — no model access, no PII — and
 renders the publishable summary. It is useful to HR/people-analytics teams
 preparing for an audit, independent auditors performing one, and engineers who
-want bias checks in CI before a tool ever reaches production.
+want bias checks in CI before a tool ever reaches production — from Python, the
+command line, or a browser.
 
 - **NYC Local Law 144 (2021)** requires annual bias audits of AEDTs and public
   summaries of **selection/scoring rates and impact ratios** — by sex, by
@@ -37,6 +38,7 @@ after that your browser keeps a copy. You can also save the page
 
 - [No coding? Use the web app](#no-coding-use-the-web-app)
 - [Installation](#installation)
+- [Command line](#command-line)
 - [A complete example](#a-complete-example)
   - [1. The input: what your data must look like](#1-the-input-what-your-data-must-look-like)
   - [2. Run the audit](#2-run-the-audit)
@@ -55,9 +57,32 @@ after that your browser keeps a copy. You can also save the page
 ## Installation
 
 ```bash
-pip install aedt-audit            # core
+pip install aedt-audit            # core, including the aedt-audit command
+pip install 'aedt-audit[excel]'   # + .xlsx input
 pip install 'aedt-audit[schema]'  # + traceability-record validation
 ```
+
+## Command line
+
+Every report is also available without writing Python:
+
+```bash
+aedt-audit summary applicants.csv --outcome selected --significance \
+    --tool-name resume-screener --tool-version 2.3.1 \
+    --format html --out audit_out/bias_audit.html        # the shareable report
+aedt-audit summary applicants.csv --outcome selected --format csv --out audit_out/
+aedt-audit lifecycle 2023=a.csv 2024=b.csv 2025=c.csv --outcome selected --drift-alert 0.05
+aedt-audit lifecycle all_years.csv --period-col year --score score
+```
+
+Column names default to `sex` / `race_ethnicity`; pass `--sex` / `--race` for
+yours. Decisions may be booleans, 0/1, or yes/no text; rows with no recorded
+decision stop the run unless you pass `--drop-missing-outcome`, in which case the
+report says how many were left out. Add **`--fail-on-adverse-impact`** (summary)
+or **`--fail-on-review`** (lifecycle) to use the command as a CI gate: it exits
+with status **3** when a benchmarked category is below the four-fifths line (or a
+period is flagged for review), **1** on an input error, **0** otherwise.
+`aedt-audit --help` lists every option.
 
 ## A complete example
 
@@ -196,13 +221,13 @@ measured against. The **sex** table on the demo data, with the new columns:
 
 | sex     |    n |   selected |   rate |   impact_ratio | adverse_impact_eeoc   |   z_score | p_value   | significant_2sd   | small_sample   |   selections_to_four_fifths |
 |:--------|-----:|-----------:|-------:|---------------:|:----------------------|----------:|:----------|:------------------|:---------------|----------------------------:|
-| female  | 2441 |        510 |   0.21 |          0.544 | True                  |    -13.35 | <0.001    | True              | False          |                         240 |
-| male    | 2409 |        925 |   0.38 |          1     | False                 |      0    | 1.000     | False             | False          |                           0 |
-| unknown |  150 |         65 |   0.43 |          1.129 | False                 |      1.2  | 0.228     | False             | False          |                           0 |
+| female  | 2441 |        510 |   0.21 |          0.544 | True                  |   -13.354 | <0.001    | True              | False          |                         240 |
+| male    | 2409 |        925 |   0.38 |          1     | False                 |     0     | 1.000     | False             | False          |                           0 |
+| unknown |  150 |         65 |   0.43 |          1.129 | False                 |     1.204 | 0.228     | False             | False          |                           0 |
 
 - **`z_score`** — how many standard deviations the category's rate sits from the
   benchmark's; negative means lower. Beyond about −2 the gap is unlikely to be
-  chance. Women here: -13.4 standard deviations below men.
+  chance. Women here: 13.4 standard deviations below men.
 - **`p_value`** — the probability of a gap at least this large if selection were
   in fact equal (two-sided).
 - **`significant_2sd`** — the category is two or more standard deviations *below*

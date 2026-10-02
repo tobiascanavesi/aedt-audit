@@ -9,6 +9,7 @@ for embedding in another page.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
 from html import escape
 from typing import TYPE_CHECKING, Any
@@ -16,8 +17,8 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from .charts import FLAG, FONT, impact_ratio_chart, lifecycle_chart
-from .impact import _METRIC_COLUMNS, benchmark_mask, category_columns
+from .charts import FLAG, FONT, MINUS, impact_ratio_chart, lifecycle_chart
+from .impact import benchmark_mask, category_columns
 from .rates import UNKNOWN
 from .significance import SIGNIFICANCE_NOTE
 
@@ -49,7 +50,6 @@ LIFECYCLE_DISCLAIMER = (
 )
 
 REPORT_CSS = (
-    "body{margin:0}"
     ".aedt-report{--page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink-2:#52514e;"
     "--rule:#e1e0d9;--alert:#d03b3b;--alert-bg:rgba(208,59,59,.08);"
     "font-family:" + FONT + ";color:var(--ink);background:var(--page);margin:0;"
@@ -102,8 +102,7 @@ def exclusion_note(table: pd.DataFrame) -> str | None:
     """The DCWP small-category disclosure for a table, or ``None`` if nothing is excluded."""
     if "excluded" not in table.columns or not table["excluded"].any():
         return None
-    cat_cols = [c for c in table.columns if c not in _METRIC_COLUMNS]
-    small = table.loc[table["excluded"], cat_cols]
+    small = table.loc[table["excluded"], category_columns(table)]
     cats = ", ".join(" × ".join(str(v) for v in row) for row in small.to_numpy())
     return (
         f"Categories below 2% of the sample ({cats}) are reported but excluded "
@@ -116,9 +115,18 @@ def document(title: str, body: str) -> str:
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{escape(title)}</title>\n<style>{REPORT_CSS}</style>\n</head>\n<body>\n"
+        f"<title>{escape(title)}</title>\n<style>body{{margin:0}}{REPORT_CSS}</style>\n"
+        "</head>\n<body>\n"
         f"{body}\n</body>\n</html>\n"
     )
+
+
+_CODE_SPAN = re.compile(r"`([^`]+)`")
+
+
+def _inline(text: str) -> str:
+    """Escape a note for HTML and render its backticked identifiers as ``<code>``."""
+    return _CODE_SPAN.sub(r"<code>\1</code>", escape(text))
 
 
 def _finish(title: str, body: str, fragment: bool) -> str:
@@ -149,7 +157,7 @@ def _cell(col: str, value: Any, decimals: int, ratio_decimals: int) -> str:
         if col == "p_value" and value < 10**-ratio_decimals:
             return f"<{10**-ratio_decimals:.{ratio_decimals}f}"
         d = ratio_decimals if col in RATIO_COLUMNS else decimals
-        return f"{value:.{d}f}"
+        return f"{value:.{d}f}".replace("-", MINUS)
     return escape(str(value))
 
 
@@ -370,8 +378,8 @@ def summary_html(
 
     parts.append("<footer>")
     if summary.has_significance:
-        parts.append(f'<p class="disclaimer">{escape(SIGNIFICANCE_NOTE)}</p>')
-    parts.append(f'<p class="disclaimer">{escape(DISCLAIMER)}</p></footer></main>')
+        parts.append(f'<p class="disclaimer">{_inline(SIGNIFICANCE_NOTE)}</p>')
+    parts.append(f'<p class="disclaimer">{_inline(DISCLAIMER)}</p></footer></main>')
     return _finish(title, "\n".join(parts), fragment)
 
 

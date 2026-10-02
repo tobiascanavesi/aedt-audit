@@ -25,7 +25,7 @@ from .significance import (
 from .synth import synthetic_applicants, synthetic_lifecycle
 from .traceability import example_record, load_schema, validate_record
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "DEFAULT_MIN_CATEGORY_SHARE",

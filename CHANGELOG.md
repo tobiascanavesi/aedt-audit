@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 ### Fixed
 - Missing outcomes were silently counted as **selected** (NaN is truthy under
   `astype(bool)`), and text outcomes such as `yes`/`no` were all counted as
@@ -28,6 +30,14 @@ All notable changes to this project are documented here. The format follows
   ratio of 0.796 is no longer displayed as `0.80` beside an adverse-impact flag.
 
 ### Added
+- `aedt_audit.inputs`: the file reading, missing-value and period-splitting rules
+  shared by the command line and the browser app (CSV encodings, blank cells as
+  missing, chronological ordering of integer/date period labels, duplicate-label
+  rejection). `excel` extra for `.xlsx` input.
+- `aedt-audit` command line (`summary` and `lifecycle`): Markdown, HTML, JSON or
+  CSV output to stdout or a path, `--significance`, `--drop-missing-outcome`,
+  `LABEL=FILE` periods or `--period-col`, and CI gates `--fail-on-adverse-impact`
+  / `--fail-on-review` that exit with status 3 on a finding.
 - **A no-code web app for HR teams** (`web/index.html`, published to GitHub
   Pages): drop in a `.csv`/`.xlsx` export, confirm which column is which, run
   the audit, and download the report, JSON, Markdown or CSVs. It runs this
@@ -91,7 +101,8 @@ First public release.
 - Synthetic applicant generator with injectable bias for demos and tests.
 - Hand-computed test fixtures for every legal formula.
 
-[Unreleased]: https://github.com/tobiascanavesi/aedt-audit/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/tobiascanavesi/aedt-audit/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tobiascanavesi/aedt-audit/compare/v0.1.1...v0.3.0
 [0.2.0]: https://github.com/tobiascanavesi/aedt-audit/compare/v0.1.1...73bfd44
 [0.1.1]: https://github.com/tobiascanavesi/aedt-audit/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/tobiascanavesi/aedt-audit/releases/tag/v0.1.0
