@@ -37,7 +37,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from html import escape
 from pathlib import Path
 
 import numpy as np
@@ -45,18 +44,10 @@ import pandas as pd
 
 from .impact import FOUR_FIFTHS, benchmark_mask
 from .rates import DEFAULT_MIN_CATEGORY_SHARE
-from .report import GROUPINGS, AuditMetadata, _json_safe, _metadata_items, ll144_summary
+from .render import LIFECYCLE_DISCLAIMER, lifecycle_html, metadata_items
+from .report import GROUPINGS, AuditMetadata, _json_safe, ll144_summary
 
 _INTERSECTION_SEP = " × "
-
-LIFECYCLE_DISCLAIMER = (
-    "Boundary margin = worst benchmarked impact ratio − 0.8; profile drift = "
-    "`(1/√n)·‖ratios(t) − ratios(t−h)‖₂` over shared groups. Methodology after "
-    "Ferrario (2026); the only threshold is the EEOC four-fifths rule (0.8, "
-    "29 CFR § 1607.4(D)). LL144 mandates publishing impact ratios but sets no "
-    "numeric threshold. This summary is generated tooling output, not an "
-    "independent bias audit and not legal advice."
-)
 
 
 @dataclass
@@ -85,7 +76,6 @@ class LifecycleReport:
     drift_alert: float | None
     series: dict[str, list[LifecyclePoint]]  # keyed by grouping name
     metadata: AuditMetadata = field(default_factory=AuditMetadata)
-
 
     def _flagged(self, point: LifecyclePoint) -> bool:
         drift_trigger = (
@@ -127,7 +117,7 @@ class LifecycleReport:
 
     def to_markdown(self, *, decimals: int = 2) -> str:
         parts = [f"# Bias-audit lifecycle summary ({self.kind} rates)"]
-        meta = _metadata_items(self.metadata)
+        meta = metadata_items(self.metadata)
         if meta:
             parts.append("\n".join(f"- **{k}**: {v}" for k, v in meta.items()))
         parts.append(f"- **drift horizon (h)**: {self.horizon} period(s)")
@@ -141,23 +131,12 @@ class LifecycleReport:
         parts.append(f"*{LIFECYCLE_DISCLAIMER}*")
         return "\n\n".join(parts)
 
-    def to_html(self, *, decimals: int = 2) -> str:
-        parts = [f"<h1>Bias-audit lifecycle summary ({escape(self.kind)} rates)</h1>"]
-        items = [
-            f"<li><strong>{escape(k)}</strong>: {escape(str(v))}</li>"
-            for k, v in _metadata_items(self.metadata).items()
-        ]
-        items.append(f"<li><strong>drift horizon (h)</strong>: {self.horizon} period(s)</li>")
-        if self.drift_alert is not None:
-            items.append(f"<li><strong>drift alert threshold</strong>: {self.drift_alert:g}</li>")
-        parts.append("<ul>" + "".join(items) + "</ul>")
-        df = self.to_dataframe()
-        for grouping in self.series:
-            sub = df[df["grouping"] == grouping].drop(columns="grouping")
-            parts.append(f"<h2>{escape(grouping.replace('_', '/'))}</h2>")
-            parts.append(_format_table(sub, decimals).to_html(index=False, border=0))
-        parts.append(f"<p><em>{escape(LIFECYCLE_DISCLAIMER)}</em></p>")
-        return "\n".join(parts)
+    def to_html(self, *, decimals: int = 2, fragment: bool = False) -> str:
+        """A self-contained HTML report with margin/drift charts (no scripts).
+
+        ``fragment=True`` returns just the report body for embedding.
+        """
+        return lifecycle_html(self, decimals=decimals, fragment=fragment)
 
     def to_json(self, *, decimals: int = 4) -> str:
         payload = {
@@ -339,4 +318,3 @@ def _round_point(point: dict, decimals: int) -> dict:
             point[key] = round(value, decimals)
     point["ratios"] = {k: round(v, decimals) for k, v in point["ratios"].items()}
     return point
-

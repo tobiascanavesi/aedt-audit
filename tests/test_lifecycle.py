@@ -198,3 +198,12 @@ def test_csv_export_creates_missing_directories(tmp_path):
     target = tmp_path / "nested" / "dir"
     paths = audit_lifecycle(synthetic_lifecycle(2, seed=6), outcome="selected").save_csvs(target)
     assert len(paths) == 3 and all(Path(p).exists() for p in paths)
+
+
+def test_html_is_a_complete_document_with_one_chart_per_grouping():
+    report = audit_lifecycle(synthetic_lifecycle(4, seed=8), outcome="selected", drift_alert=0.05)
+    html = report.to_html()
+    assert html.startswith("<!doctype html>") and "<script" not in html
+    assert html.count("<svg") == 3
+    assert "Periods flagged for review" in html and "How to read this" in html
+    assert "<html" not in report.to_html(fragment=True)

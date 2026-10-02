@@ -125,3 +125,45 @@ def test_to_dataframe_is_tidy_long_form(pool):
     assert list(df.columns[:3]) == ["grouping", "sex", "race_ethnicity"]
     assert set(df["grouping"]) == {"sex", "race_ethnicity", "intersectional"}
     assert df.loc[df["grouping"] == "sex", "race_ethnicity"].isna().all()
+
+
+def test_html_is_a_complete_self_contained_document_with_charts(pool):
+    from html.parser import HTMLParser
+
+    html = ll144_summary(
+        pool, outcome="selected", significance=True, metadata=AuditMetadata(tool_name="t-1")
+    ).to_html()
+    assert html.startswith("<!doctype html>")
+    assert "<script" not in html and "http" not in html.split("<body>")[1].replace(
+        "http://www.w3.org/2000/svg", ""
+    )
+    assert html.count("<svg") == 3
+    assert "Individuals assessed" in html and "How to read this" in html
+    assert "Castaneda" in html  # the significance note travels with the columns
+    assert "<title>t-1 — Bias-audit summary (selection rates)</title>" in html
+
+    class Strict(HTMLParser):
+        def error(self, message):  # pragma: no cover
+            raise AssertionError(message)
+
+    Strict().feed(html)
+    fragment = ll144_summary(pool, outcome="selected").to_html(fragment=True)
+    assert "<html" not in fragment and fragment.lstrip().startswith("<style>")
+    assert fragment.count("<svg") == 3
+
+
+def test_html_table_marks_flagged_and_dimmed_rows():
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "sex": ["m"] * 100 + ["f"] * 100 + [None] * 10,
+            "race_ethnicity": "r",
+            "selected": [True] * 50 + [False] * 50 + [True] * 30 + [False] * 70 + [True] * 10,
+        }
+    )
+    html = ll144_summary(df, outcome="selected").to_html()
+    sex_section = html.split("<h2>sex</h2>")[1].split("</section>")[0]
+    assert '<tr class="flag"><td class="cat">f</td>' in sex_section
+    assert '<tr class="dim"><td class="cat">unknown</td>' in sex_section
+    assert "◆ yes" in sex_section

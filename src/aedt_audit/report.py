@@ -6,39 +6,32 @@ rates, and impact ratios — for sex categories, race/ethnicity categories, and
 the intersectional combination of both.
 
 :func:`ll144_summary` produces all three tables in one call and renders them to
-Markdown, HTML, JSON, or CSV. This package computes the required metrics; the
-bias audit itself must be conducted by an independent auditor (6 RCNY § 5-301).
+Markdown, a self-contained HTML report with charts, JSON, or CSV. This package
+computes the required metrics; the bias audit itself must be conducted by an
+independent auditor (6 RCNY § 5-301).
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from html import escape
 from pathlib import Path
 
 import pandas as pd
 
 from .impact import _METRIC_COLUMNS, four_fifths
 from .rates import DEFAULT_MIN_CATEGORY_SHARE, scoring_rates, selection_rates
+from .render import (
+    DISCLAIMER,
+    RATIO_COLUMNS,
+    exclusion_note,
+    metadata_items,
+    summary_html,
+)
 from .significance import SIGNIFICANCE_NOTE
 from .significance import significance as _significance
 
 GROUPINGS = ("sex", "race_ethnicity", "intersectional")
-
-#: Columns rendered with ``ratio_decimals`` instead of ``decimals``. An impact
-#: ratio of 0.796 must not be displayed as 0.80 beside a flag saying it is below
-#: 0.8, so ratios (and the significance statistics) get one more decimal than
-#: rates by default.
-RATIO_COLUMNS = ("impact_ratio", "z_score", "p_value")
-
-DISCLAIMER = (
-    "Impact ratio = category rate / highest included category rate (LL144). "
-    "`adverse_impact_eeoc` flags ratios below 0.8 per the EEOC four-fifths "
-    "rule (29 CFR § 1607.4(D)); LL144 itself sets no numeric threshold. "
-    "This summary is generated tooling output, not an independent bias audit "
-    "and not legal advice."
-)
 
 
 @dataclass
@@ -53,22 +46,8 @@ class AuditMetadata:
     notes: str = ""
 
 
-def _metadata_items(metadata: AuditMetadata) -> dict[str, str]:
-    """The non-empty metadata fields, in declaration order."""
-    return {k: v for k, v in asdict(metadata).items() if v}
-
-
-def _exclusion_note(table: pd.DataFrame) -> str | None:
-    """The DCWP small-category disclosure for a table, or ``None`` if nothing is excluded."""
-    if "excluded" not in table.columns or not table["excluded"].any():
-        return None
-    cat_cols = [c for c in table.columns if c not in _METRIC_COLUMNS]
-    small = table.loc[table["excluded"], cat_cols]
-    cats = ", ".join(" × ".join(str(v) for v in row) for row in small.to_numpy())
-    return (
-        f"Categories below 2% of the sample ({cats}) are reported but excluded "
-        f"from the impact-ratio benchmark, per 6 RCNY § 5-301."
-    )
+_metadata_items = metadata_items
+_exclusion_note = exclusion_note
 
 
 def _round_table(table: pd.DataFrame, decimals: int, ratio_decimals: int) -> pd.DataFrame:
@@ -124,26 +103,16 @@ class LL144Summary:
         parts.extend(f"*{note}*" for note in self._notes())
         return "\n\n".join(parts)
 
-    def to_html(self, *, decimals: int = 2, ratio_decimals: int = 3) -> str:
-        parts = [f"<h1>Bias-audit summary ({escape(self.kind)} rates)</h1>"]
-        items = [
-            f"<li><strong>{escape(k)}</strong>: {escape(str(v))}</li>"
-            for k, v in _metadata_items(self.metadata).items()
-        ]
-        if self.sample_median is not None:
-            items.append(f"<li><strong>sample median score</strong>: {self.sample_median:g}</li>")
-        if items:
-            parts.append("<ul>" + "".join(items) + "</ul>")
-        for name, table in self.tables.items():
-            parts.append(f"<h2>{escape(name.replace('_', '/'))}</h2>")
-            parts.append(
-                _round_table(table, decimals, ratio_decimals).to_html(index=False, border=0)
-            )
-            note = _exclusion_note(table)
-            if note:
-                parts.append(f"<p><em>{escape(note)}</em></p>")
-        parts.extend(f"<p><em>{escape(note)}</em></p>" for note in self._notes())
-        return "\n".join(parts)
+    def to_html(self, *, decimals: int = 2, ratio_decimals: int = 3, fragment: bool = False) -> str:
+        """A self-contained HTML report: inline CSS, inline SVG charts, no scripts.
+
+        Opens anywhere, prints to PDF, and can be emailed as a single file.
+        ``fragment=True`` returns just the report body (with its styles) for
+        embedding in another page.
+        """
+        return summary_html(
+            self, decimals=decimals, ratio_decimals=ratio_decimals, fragment=fragment
+        )
 
     def to_json(self, *, decimals: int = 4) -> str:
         payload = {
@@ -214,9 +183,7 @@ def ll144_summary(
                 data, by=by, outcome=outcome, min_category_share=min_category_share
             )
         else:
-            rates = scoring_rates(
-                data, by=by, score=score, min_category_share=min_category_share
-            )
+            rates = scoring_rates(data, by=by, score=score, min_category_share=min_category_share)
             sample_median = rates.attrs["sample_median"]
         table = four_fifths(rates, by=by)
         tables[name] = _significance(table, by=by) if significance else table
