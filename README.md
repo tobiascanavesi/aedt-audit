@@ -12,7 +12,8 @@ candidates, U.S. rules already tell you what you must measure. `aedt-audit`
 computes those artifacts from a plain table — no model access, no PII — and
 renders the publishable summary. It is useful to HR/people-analytics teams
 preparing for an audit, independent auditors performing one, and engineers who
-want bias checks in CI before a tool ever reaches production.
+want bias checks in CI before a tool ever reaches production — from Python, the
+command line, or a browser.
 
 - **NYC Local Law 144 (2021)** requires annual bias audits of AEDTs and public
   summaries of **selection/scoring rates and impact ratios** — by sex, by
@@ -37,6 +38,7 @@ after that your browser keeps a copy. You can also save the page
 
 - [No coding? Use the web app](#no-coding-use-the-web-app)
 - [Installation](#installation)
+- [Command line](#command-line)
 - [A complete example](#a-complete-example)
   - [1. The input: what your data must look like](#1-the-input-what-your-data-must-look-like)
   - [2. Run the audit](#2-run-the-audit)
@@ -58,6 +60,28 @@ after that your browser keeps a copy. You can also save the page
 pip install aedt-audit            # core
 pip install 'aedt-audit[schema]'  # + traceability-record validation
 ```
+
+## Command line
+
+Every report is also available without writing Python:
+
+```bash
+aedt-audit summary applicants.csv --outcome selected --significance \
+    --tool-name resume-screener --tool-version 2.3.1 \
+    --format html --out audit_out/bias_audit.html        # the shareable report
+aedt-audit summary applicants.csv --outcome selected --format csv --out audit_out/
+aedt-audit lifecycle 2023=a.csv 2024=b.csv 2025=c.csv --outcome selected --drift-alert 0.05
+aedt-audit lifecycle all_years.csv --period-col year --score score
+```
+
+Column names default to `sex` / `race_ethnicity`; pass `--sex` / `--race` for
+yours. Decisions may be booleans, 0/1, or yes/no text; rows with no recorded
+decision stop the run unless you pass `--drop-missing-outcome`, in which case the
+report says how many were left out. Add **`--fail-on-adverse-impact`** (summary)
+or **`--fail-on-review`** (lifecycle) to use the command as a CI gate: it exits
+with status **3** when a benchmarked category is below the four-fifths line (or a
+period is flagged for review), **1** on an input error, **0** otherwise.
+`aedt-audit --help` lists every option.
 
 ## A complete example
 
