@@ -11,6 +11,7 @@ pool = synthetic_applicants(5000, seed=0, score_bias={("sex", "female"): -8.0})
 summary = ll144_summary(
     pool,
     outcome="selected",
+    significance=True,  # add the standard-deviation test and the people-count gap
     metadata=AuditMetadata(
         tool_name="example-screener",
         tool_version="2.3.1",

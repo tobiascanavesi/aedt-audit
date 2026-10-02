@@ -28,6 +28,14 @@ All notable changes to this project are documented here. The format follows
   ratio of 0.796 is no longer displayed as `0.80` beside an adverse-impact flag.
 
 ### Added
+- `significance()` and `ll144_summary(..., significance=True)`: the standard-
+  deviation analysis federal guidance pairs with the four-fifths rule
+  (29 CFR § 1607.4(D); *Castaneda v. Partida*; *Hazelwood*). Adds `z_score`,
+  two-sided `p_value`, a directional `significant_2sd` flag, a `small_sample`
+  flag (< 30 individuals compared), and `selections_to_four_fifths`, the number
+  of additional selections that would have brought a category to the line.
+  Supplementary by design: it never overrides `adverse_impact_eeoc`. Pure
+  Python arithmetic, no scipy.
 - `benchmark_mask()`: the rows the four-fifths rule actually compares (neither
   `excluded` nor `unknown`), shared by the impact-ratio, lifecycle and report code.
 - `impact_ratios()` / `four_fifths()` accept `by=` to name the demographic

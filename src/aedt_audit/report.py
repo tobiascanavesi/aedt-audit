@@ -21,13 +21,16 @@ import pandas as pd
 
 from .impact import _METRIC_COLUMNS, four_fifths
 from .rates import DEFAULT_MIN_CATEGORY_SHARE, scoring_rates, selection_rates
+from .significance import SIGNIFICANCE_NOTE
+from .significance import significance as _significance
 
 GROUPINGS = ("sex", "race_ethnicity", "intersectional")
 
 #: Columns rendered with ``ratio_decimals`` instead of ``decimals``. An impact
 #: ratio of 0.796 must not be displayed as 0.80 beside a flag saying it is below
-#: 0.8, so ratios get one more decimal than rates by default.
-RATIO_COLUMNS = ("impact_ratio",)
+#: 0.8, so ratios (and the significance statistics) get one more decimal than
+#: rates by default.
+RATIO_COLUMNS = ("impact_ratio", "z_score", "p_value")
 
 DISCLAIMER = (
     "Impact ratio = category rate / highest included category rate (LL144). "
@@ -96,6 +99,15 @@ class LL144Summary:
     metadata: AuditMetadata = field(default_factory=AuditMetadata)
     sample_median: float | None = None
 
+    @property
+    def has_significance(self) -> bool:
+        return any("z_score" in t.columns for t in self.tables.values())
+
+    def _notes(self) -> list[str]:
+        notes = [SIGNIFICANCE_NOTE] if self.has_significance else []
+        notes.append(DISCLAIMER)
+        return notes
+
     def to_markdown(self, *, decimals: int = 2, ratio_decimals: int = 3) -> str:
         parts = [f"# Bias-audit summary ({self.kind} rates)"]
         meta = _metadata_items(self.metadata)
@@ -109,7 +121,7 @@ class LL144Summary:
             note = _exclusion_note(table)
             if note:
                 parts.append(f"*{note}*")
-        parts.append(f"*{DISCLAIMER}*")
+        parts.extend(f"*{note}*" for note in self._notes())
         return "\n\n".join(parts)
 
     def to_html(self, *, decimals: int = 2, ratio_decimals: int = 3) -> str:
@@ -130,7 +142,7 @@ class LL144Summary:
             note = _exclusion_note(table)
             if note:
                 parts.append(f"<p><em>{escape(note)}</em></p>")
-        parts.append(f"<p><em>{escape(DISCLAIMER)}</em></p>")
+        parts.extend(f"<p><em>{escape(note)}</em></p>" for note in self._notes())
         return "\n".join(parts)
 
     def to_json(self, *, decimals: int = 4) -> str:
@@ -180,11 +192,15 @@ def ll144_summary(
     score: str | None = None,
     metadata: AuditMetadata | None = None,
     min_category_share: float = DEFAULT_MIN_CATEGORY_SHARE,
+    significance: bool = False,
 ) -> LL144Summary:
     """Compute the three LL144 tables (sex, race/ethnicity, intersectional).
 
     Provide exactly one of ``outcome`` (binary selection) or ``score``
-    (continuous; the median-rule scoring rate is used).
+    (continuous; the median-rule scoring rate is used). With
+    ``significance=True`` each table also carries the standard-deviation
+    analysis from :func:`aedt_audit.significance` (z-score, p-value, flags,
+    and the selections needed to reach the four-fifths line).
     """
     if (outcome is None) == (score is None):
         raise ValueError("provide exactly one of `outcome` or `score`")
@@ -202,7 +218,8 @@ def ll144_summary(
                 data, by=by, score=score, min_category_share=min_category_share
             )
             sample_median = rates.attrs["sample_median"]
-        tables[name] = four_fifths(rates, by=by)
+        table = four_fifths(rates, by=by)
+        tables[name] = _significance(table, by=by) if significance else table
 
     return LL144Summary(
         kind="selection" if outcome is not None else "scoring",

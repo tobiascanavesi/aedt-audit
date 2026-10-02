@@ -36,6 +36,12 @@ _METRIC_COLUMNS = frozenset(
         "excluded",
         "impact_ratio",
         "adverse_impact_eeoc",
+        # added by aedt_audit.significance
+        "z_score",
+        "p_value",
+        "significant_2sd",
+        "small_sample",
+        "selections_to_four_fifths",
     }
 )
 
