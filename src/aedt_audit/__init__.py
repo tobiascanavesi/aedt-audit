@@ -9,7 +9,7 @@ This package computes required metrics; under LL144 the bias audit itself must
 be conducted by an independent auditor. Nothing here is legal advice.
 """
 
-from .impact import FOUR_FIFTHS, four_fifths, impact_ratios
+from .impact import FOUR_FIFTHS, benchmark_mask, four_fifths, impact_ratios
 from .lifecycle import LifecyclePoint, LifecycleReport, audit_lifecycle
 from .rates import DEFAULT_MIN_CATEGORY_SHARE, UNKNOWN, scoring_rates, selection_rates
 from .report import AuditMetadata, LL144Summary, ll144_summary
@@ -28,6 +28,7 @@ __all__ = [
     "LifecycleReport",
     "__version__",
     "audit_lifecycle",
+    "benchmark_mask",
     "example_record",
     "four_fifths",
     "impact_ratios",

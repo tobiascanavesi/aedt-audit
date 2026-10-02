@@ -9,8 +9,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,3 +23,19 @@ jobs:
         run: ruff check src tests
       - name: Test
         run: pytest --cov=aedt_audit --cov-report=term-missing
+
+  min-pins:
+    # The oldest pandas/numpy this package claims to support. Those releases
+    # ship wheels only up to Python 3.11, so this job runs on 3.10.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install at the declared floors
+        run: |
+          pip install -e ".[dev]"
+          pip install "pandas==1.5.0" "numpy==1.23.0"
+      - name: Test
+        run: pytest

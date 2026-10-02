@@ -84,3 +84,21 @@ def test_unknown_in_any_intersectional_column_excluded_from_benchmark():
 def test_missing_rate_column_raises():
     with pytest.raises(KeyError):
         impact_ratios(pd.DataFrame({"g": ["a"]}))
+
+
+def test_benchmark_mask_and_explicit_by():
+    from aedt_audit import benchmark_mask
+
+    table = pd.DataFrame(
+        {
+            "sex": ["m", "f", "unknown", "x"],
+            "rate": [0.5, 0.4, 0.9, 1.0],
+            "excluded": [False, False, False, True],
+        }
+    )
+    assert list(benchmark_mask(table)) == [True, True, False, False]
+    assert list(benchmark_mask(table, by=["sex"])) == [True, True, False, False]
+    out = impact_ratios(table, by=["sex"])
+    assert out.attrs["benchmark_rate"] == pytest.approx(0.5)
+    with pytest.raises(KeyError):
+        benchmark_mask(table, by=["nope"])

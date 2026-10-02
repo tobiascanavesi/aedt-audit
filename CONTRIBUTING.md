@@ -27,4 +27,7 @@ ruff check src tests && pytest
 
 - One logical change per PR, with a clear description of the *legal basis* for
   any behavioral change (cite the rule section).
-- CI (ruff + pytest on Python 3.10–3.12) must pass.
+- CI must pass: ruff + pytest on Python 3.10–3.14, plus a minimum-pins job at
+  the oldest supported pandas/numpy (1.5 / 1.23 on Python 3.10).
+- The package version lives in `src/aedt_audit/__init__.py` (`__version__`);
+  `pyproject.toml` reads it from there. Add a line to `CHANGELOG.md`.

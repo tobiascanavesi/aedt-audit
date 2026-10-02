@@ -179,3 +179,22 @@ def test_csv_export_writes_one_file_per_grouping(tmp_path):
     assert len(paths) == 3
     for path in paths:
         assert Path(path).exists()
+
+
+def test_html_render_mentions_legal_sources_and_disclaimer():
+    report = audit_lifecycle(
+        synthetic_lifecycle(3, seed=5),
+        outcome="selected",
+        drift_alert=0.05,
+        metadata=AuditMetadata(tool_name="screener-y"),
+    )
+    html = report.to_html()
+    assert "<h1>" in html and "screener-y" in html
+    assert "1607.4(D)" in html and "independent bias audit" in html
+    assert "drift alert threshold" in html
+
+
+def test_csv_export_creates_missing_directories(tmp_path):
+    target = tmp_path / "nested" / "dir"
+    paths = audit_lifecycle(synthetic_lifecycle(2, seed=6), outcome="selected").save_csvs(target)
+    assert len(paths) == 3 and all(Path(p).exists() for p in paths)

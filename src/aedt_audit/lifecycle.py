@@ -37,16 +37,26 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from html import escape
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .impact import FOUR_FIFTHS
-from .rates import DEFAULT_MIN_CATEGORY_SHARE, UNKNOWN
-from .report import GROUPINGS, AuditMetadata, ll144_summary
+from .impact import FOUR_FIFTHS, benchmark_mask
+from .rates import DEFAULT_MIN_CATEGORY_SHARE
+from .report import GROUPINGS, AuditMetadata, _json_safe, _metadata_items, ll144_summary
 
 _INTERSECTION_SEP = " × "
+
+LIFECYCLE_DISCLAIMER = (
+    "Boundary margin = worst benchmarked impact ratio − 0.8; profile drift = "
+    "`(1/√n)·‖ratios(t) − ratios(t−h)‖₂` over shared groups. Methodology after "
+    "Ferrario (2026); the only threshold is the EEOC four-fifths rule (0.8, "
+    "29 CFR § 1607.4(D)). LL144 mandates publishing impact ratios but sets no "
+    "numeric threshold. This summary is generated tooling output, not an "
+    "independent bias audit and not legal advice."
+)
 
 
 @dataclass
@@ -76,14 +86,6 @@ class LifecycleReport:
     series: dict[str, list[LifecyclePoint]]  # keyed by grouping name
     metadata: AuditMetadata = field(default_factory=AuditMetadata)
 
-    _DISCLAIMER = (
-        "*Boundary margin = worst benchmarked impact ratio − 0.8; profile drift = "
-        "`(1/√n)·‖ratios(t) − ratios(t−h)‖₂` over shared groups. Methodology after "
-        "Ferrario (2026); the only threshold is the EEOC four-fifths rule (0.8, "
-        "29 CFR § 1607.4(D)). LL144 mandates publishing impact ratios but sets no "
-        "numeric threshold. This summary is generated tooling output, not an "
-        "independent bias audit and not legal advice.*"
-    )
 
     def _flagged(self, point: LifecyclePoint) -> bool:
         drift_trigger = (
@@ -125,7 +127,7 @@ class LifecycleReport:
 
     def to_markdown(self, *, decimals: int = 2) -> str:
         parts = [f"# Bias-audit lifecycle summary ({self.kind} rates)"]
-        meta = {k: v for k, v in asdict(self.metadata).items() if v}
+        meta = _metadata_items(self.metadata)
         if meta:
             parts.append("\n".join(f"- **{k}**: {v}" for k, v in meta.items()))
         parts.append(f"- **drift horizon (h)**: {self.horizon} period(s)")
@@ -136,8 +138,26 @@ class LifecycleReport:
             sub = df[df["grouping"] == grouping].drop(columns="grouping")
             parts.append(f"## {grouping.replace('_', '/')}")
             parts.append(_format_table(sub, decimals).to_markdown(index=False))
-        parts.append(self._DISCLAIMER)
+        parts.append(f"*{LIFECYCLE_DISCLAIMER}*")
         return "\n\n".join(parts)
+
+    def to_html(self, *, decimals: int = 2) -> str:
+        parts = [f"<h1>Bias-audit lifecycle summary ({escape(self.kind)} rates)</h1>"]
+        items = [
+            f"<li><strong>{escape(k)}</strong>: {escape(str(v))}</li>"
+            for k, v in _metadata_items(self.metadata).items()
+        ]
+        items.append(f"<li><strong>drift horizon (h)</strong>: {self.horizon} period(s)</li>")
+        if self.drift_alert is not None:
+            items.append(f"<li><strong>drift alert threshold</strong>: {self.drift_alert:g}</li>")
+        parts.append("<ul>" + "".join(items) + "</ul>")
+        df = self.to_dataframe()
+        for grouping in self.series:
+            sub = df[df["grouping"] == grouping].drop(columns="grouping")
+            parts.append(f"<h2>{escape(grouping.replace('_', '/'))}</h2>")
+            parts.append(_format_table(sub, decimals).to_html(index=False, border=0))
+        parts.append(f"<p><em>{escape(LIFECYCLE_DISCLAIMER)}</em></p>")
+        return "\n".join(parts)
 
     def to_json(self, *, decimals: int = 4) -> str:
         payload = {
@@ -153,10 +173,12 @@ class LifecycleReport:
         return json.dumps(_json_safe(payload), indent=2)
 
     def save_csvs(self, directory: str) -> list[str]:
+        target = Path(directory)
+        target.mkdir(parents=True, exist_ok=True)
         df = self.to_dataframe()
         paths = []
         for grouping in self.series:
-            path = Path(directory) / f"lifecycle_{self.kind}_{grouping}.csv"
+            path = target / f"lifecycle_{self.kind}_{grouping}.csv"
             df[df["grouping"] == grouping].to_csv(path, index=False)
             paths.append(str(path))
         return paths
@@ -291,12 +313,9 @@ def _profile(table: pd.DataFrame, cat_cols: Sequence[str]) -> tuple[dict[str, fl
 
     Benchmarked groups are those the four-fifths rule actually compares: neither
     ``excluded`` (the <2% small-category allowance) nor ``"unknown"`` in any
-    demographic column — the same filter :func:`impact_ratios` uses.
+    demographic column — :func:`aedt_audit.impact.benchmark_mask`.
     """
-    benchmarked = ~table["excluded"] if "excluded" in table else pd.Series(True, index=table.index)
-    for col in cat_cols:
-        benchmarked &= table[col].astype(str) != UNKNOWN
-    sub = table.loc[benchmarked]
+    sub = table.loc[benchmark_mask(table, cat_cols)]
     ratios = {
         _INTERSECTION_SEP.join(str(row[col]) for col in cat_cols): float(ratio)
         for (_, row), ratio in zip(sub.iterrows(), sub["impact_ratio"], strict=True)
@@ -321,13 +340,3 @@ def _round_point(point: dict, decimals: int) -> dict:
     point["ratios"] = {k: round(v, decimals) for k, v in point["ratios"].items()}
     return point
 
-
-def _json_safe(obj):
-    """Replace NaN floats with None so the output is valid JSON for any consumer."""
-    if isinstance(obj, float):
-        return None if pd.isna(obj) else obj
-    if isinstance(obj, dict):
-        return {k: _json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_json_safe(v) for v in obj]
-    return obj
