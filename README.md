@@ -32,6 +32,7 @@ want bias checks in CI before a tool ever reaches production.
   - [3. The output](#3-the-output)
   - [4. How to read the tables](#4-how-to-read-the-tables)
   - [5. Is the gap noise? Statistical significance](#5-is-the-gap-noise-statistical-significance)
+- [Share a report (HTML with charts)](#share-a-report-html-with-charts)
 - [Scoring tools (continuous scores)](#scoring-tools-continuous-scores)
 - [Monitoring over time (lifecycle audits)](#monitoring-over-time-lifecycle-audits)
 - [What it computes](#what-it-computes)
@@ -95,7 +96,7 @@ summary = ll144_summary(
 )
 
 print(summary.to_markdown())       # all three required tables
-summary.save_csvs("audit_out/")    # or .to_html() / .to_json()
+summary.save_csvs("audit_out/")    # or .to_json(); .to_html() for the shareable report
 ```
 
 ### 3. The output
@@ -209,6 +210,26 @@ z = −4.5 on 2,000 people is a reason to look closer. Neither overrides the oth
 and the significance columns never change `adverse_impact_eeoc`. The arithmetic
 is pure Python — no scipy.
 
+## Share a report (HTML with charts)
+
+`to_html()` returns a **complete, self-contained HTML file** — inline styles,
+inline SVG charts, no JavaScript, no external assets — that opens in any
+browser, prints to PDF, and can be emailed as a single attachment. It leads with
+an at-a-glance strip, explains every column in plain language, and pairs each
+table with a chart where bars below the four-fifths line are marked ◆ and
+non-benchmarked categories are grey with the reason spelled out:
+
+```python
+with open("bias_audit_2025.html", "w", encoding="utf-8") as f:
+    f.write(summary.to_html())          # likewise report.to_html() for a lifecycle report
+```
+
+![Impact ratios by sex: female 0.544 (below four-fifths), male 1.000, unknown 1.129](docs/img/impact-ratio-sex.svg)
+
+The charts follow the viewer's light/dark preference and never rely on colour
+alone. `to_html(fragment=True)` returns just the report body for embedding in
+your own page.
+
 ## Scoring tools (continuous scores)
 
 If your tool outputs a score instead of a yes/no, pass `score=` instead of
@@ -266,8 +287,9 @@ in 2021 and drifts into adverse impact, tripping four-fifths in 2022:
 | 2024 | female | 0.54 | -0.26 | True  | 0.07 | False | True  |
 | 2025 | female | 0.45 | -0.35 | True  | 0.06 | False | True  |
 
-`report.to_json()`, `.to_dataframe()` (tidy long form), and `.save_csvs(dir)` are
-also available, mirroring the single-period summary.
+`report.to_html()` (a self-contained report with margin and drift charts),
+`.to_json()`, `.to_dataframe()` (tidy long form), and `.save_csvs(dir)` are also
+available, mirroring the single-period summary.
 
 **Methodology & scope.** The lifecycle layer follows Andrea Ferrario,
 *A Methodology for Auditable Trustworthiness Levels in AI Lifecycle Governance*

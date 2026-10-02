@@ -28,6 +28,13 @@ All notable changes to this project are documented here. The format follows
   ratio of 0.796 is no longer displayed as `0.80` beside an adverse-impact flag.
 
 ### Added
+- `to_html()` on both reports now returns a **complete, self-contained HTML
+  document** — inline CSS, inline SVG charts, no JavaScript, no external
+  assets — with an at-a-glance strip, a plain-language "how to read this"
+  box, and a chart per table (bars below four-fifths marked ◆, non-benchmarked
+  categories grey with the reason). `fragment=True` returns the body only.
+  New `charts` module (`impact_ratio_chart`, `lifecycle_chart`) and `render`
+  module; zero new dependencies.
 - `significance()` and `ll144_summary(..., significance=True)`: the standard-
   deviation analysis federal guidance pairs with the four-fifths rule
   (29 CFR § 1607.4(D); *Castaneda v. Partida*; *Hazelwood*). Adds `z_score`,
